@@ -1,22 +1,19 @@
-import { config } from 'dotenv';
-import { resolve } from 'node:path';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { ConsoleLogger, Logger, ValidationPipe } from '@nestjs/common';
-import { LoggerMiddleware } from 'libs/middlewares/logger.middleware';
+import { config } from 'dotenv';
+import { Logger } from 'nestjs-pino';
+import { resolve } from 'node:path';
 import { AppModule } from './app.module';
 
 config({ path: resolve(process.cwd(), '.env.local'), override: true });
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
-    logger: new ConsoleLogger({
-      prefix: 'Api Gateway',
-      timestamp: true,
-    }),
-  });
+  const app = await NestFactory.create(AppModule, {});
+  app.useLogger(app.get(Logger));
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen(process.env.GATEWAY_PORT ?? 3000);
-  Logger.log(
+  console.log(
     `Gateway service is running on port ${process.env.GATEWAY_PORT || '3000'}`,
     'Bootstrap',
   );

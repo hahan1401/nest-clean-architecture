@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
-import { ConsoleLogger, Logger } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 
 config({
   path: resolve(process.cwd(), '.env.local'),
@@ -19,14 +19,11 @@ async function bootstrap() {
         host: '0.0.0.0',
         port: parseInt(process.env.LOCATION_SERVICE_PORT || '3002'),
       },
-      logger: new ConsoleLogger({
-        prefix: 'Api Location',
-        timestamp: true,
-      }),
     },
   );
+  app.useLogger(app.get(Logger));
   await app.listen();
-  Logger.log(
+  console.log(
     `Location service is running on port ${process.env.LOCATION_SERVICE_PORT || '3002'}`,
     'Bootstrap',
   );
