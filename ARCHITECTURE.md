@@ -237,6 +237,14 @@ The gateway is a **thin HTTP proxy** — no clean architecture layers needed.
 | `DatabaseModule` | Global module providing `PrismaService` |
 | `User` / `UserWithDistance` | Domain entity classes (shared since both services operate on same table) |
 
+### Logging Strategy
+
+- Every app uses a shared `nestjs-pino` HTTP config from `libs/common/src/logger`.
+- Logs are structured in production and pretty-printed only outside production for local development.
+- The gateway adds a generated `requestId` to each incoming request and the value is included in serialized logs and downstream payloads where needed.
+- Each app uses its own service label in the log message prefix so traces are easy to scan across services.
+- Prefer explicit domain or workflow logs over noisy automatic request logging.
+
 ---
 
 ## Message Patterns
