@@ -31,20 +31,19 @@ export class UpdateLocationService {
         .pipe(catchError(() => of(null))),
     );
 
-
     let locationNameArr: (string | undefined)[] = [];
-    if (reverseGeocodeResponse?.addresstype === 'amenity') {
+    if (reverseGeocodeResponse?.addresstype === 'state_district') {
+      locationNameArr = [
+        reverseGeocodeResponse?.address?.state_district,
+        reverseGeocodeResponse?.address?.state,
+        reverseGeocodeResponse?.address?.country,
+      ];
+    } else {
       locationNameArr = [
         reverseGeocodeResponse?.address?.suburb,
         reverseGeocodeResponse?.address?.city,
         reverseGeocodeResponse?.address?.country,
       ];
-    } else {
-        locationNameArr = [
-          reverseGeocodeResponse?.address?.state_district,
-          reverseGeocodeResponse?.address?.state,
-          reverseGeocodeResponse?.address?.country,
-        ];
     }
 
     const locationName = locationNameArr.filter(Boolean).join(', ') || null;

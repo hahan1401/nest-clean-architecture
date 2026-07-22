@@ -1,15 +1,17 @@
+import { GEOCODING_PATTERNS } from '@app/common';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { GEOCODING_PATTERNS } from '@app/common';
-import { GeocodingPort } from '../../domain/ports/geocoding.port';
 import { NominatimResponse } from 'libs/types/api-location/common';
+import { ReverseGeocodeService } from '../../application/usecases/reverse-geocode.service';
 
 @Controller()
 export class GeocodingController {
-  constructor(private readonly geocodingPort: GeocodingPort) {}
+  constructor(private readonly reverseGeocodeService: ReverseGeocodeService) {}
 
   @MessagePattern(GEOCODING_PATTERNS.REVERSE_GEOCODE)
-  async reverseGeocode(@Payload() data: { latitude: number; longitude: number }): Promise<NominatimResponse | null> {
-    return this.geocodingPort.reverseGeocode(data.latitude, data.longitude);
+  async reverseGeocode(
+    @Payload() data: { latitude: number; longitude: number },
+  ): Promise<NominatimResponse | null> {
+    return this.reverseGeocodeService.execute(data.latitude, data.longitude);
   }
 }
