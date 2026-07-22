@@ -1,4 +1,4 @@
-import { User, UserWithDistance } from "@app/database";
+import { User, UserWithDistance } from '@app/database';
 
 export class UserResponseDto {
   id: string;
@@ -8,7 +8,7 @@ export class UserResponseDto {
   createdAt: Date;
   updatedAt: Date;
 
-  constructor (user: User) {
+  constructor(user: User) {
     this.id = user.id;
     this.name = user.name;
     this.email = user.email;

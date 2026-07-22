@@ -6,9 +6,7 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class ChatBotService extends ChatBotServicePort {
-  constructor(
-    private readonly configService: ConfigService,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     super();
   }
 
@@ -36,9 +34,7 @@ export class ChatBotService extends ChatBotServicePort {
           });
 
           if (!response.ok) {
-            throw new Error(
-              `Ollama request failed with status ${response.status}`,
-            );
+            throw new Error(`Ollama request failed with status ${response.status}`);
           }
 
           reader = response.body?.getReader();

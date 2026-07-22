@@ -78,19 +78,11 @@ export class UserController {
     },
   ) {
     try {
-      this.logger.log(
-        `Updating user ${JSON.stringify(data)}`,
-      );
-      const user = await this.updateUserService.execute(
-        data.id,
-        data.updateData,
-      );
+      this.logger.log(`Updating user ${JSON.stringify(data)}`);
+      const user = await this.updateUserService.execute(data.id, data.updateData);
       return new UserResponseDto(user);
     } catch (err: any) {
-      this.logger.error(
-        `Failed to update user: ${err.message}`,
-        `RequestId: ${data.requestId}`,
-      );
+      this.logger.error(`Failed to update user: ${err.message}`, `RequestId: ${data.requestId}`);
       throw new RpcException({
         status: err.status ?? 404,
         message: err.message,
@@ -112,15 +104,9 @@ export class UserController {
   }
 
   @MessagePattern(USER_PATTERNS.UPDATE_LOCATION)
-  async updateLocation(
-    @Payload() data: { id: string; latitude: number; longitude: number },
-  ) {
+  async updateLocation(@Payload() data: { id: string; latitude: number; longitude: number }) {
     try {
-      const user = await this.updateLocationService.execute(
-        data.id,
-        data.latitude,
-        data.longitude,
-      );
+      const user = await this.updateLocationService.execute(data.id, data.latitude, data.longitude);
       return new UserResponseDto(user);
     } catch (err: any) {
       throw new RpcException({
@@ -133,10 +119,7 @@ export class UserController {
   @MessagePattern(USER_PATTERNS.FIND_NEARBY_USERS)
   async findNearby(@Payload() data: { id: string; radius: number }) {
     try {
-      const users = await this.findNearbyUsersService.execute(
-        data.id,
-        data.radius,
-      );
+      const users = await this.findNearbyUsersService.execute(data.id, data.radius);
       return users.map((u) => new UserWithDistanceResponseDto(u));
     } catch (err: any) {
       throw new RpcException({

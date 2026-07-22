@@ -13,11 +13,7 @@ export class NominatimGeocodingService extends GeocodingPort {
     super();
   }
 
-  async reverseGeocode(
-    latitude: number,
-    longitude: number,
-  ): Promise<NominatimResponse | null> {
-
+  async reverseGeocode(latitude: number, longitude: number): Promise<NominatimResponse | null> {
     const openStreetMapReverse = this.configService.get<string>('OPEN_STREET_MAP_REVERSE');
     const url = `${openStreetMapReverse}?lat=${latitude}&lon=${longitude}&format=json`;
 

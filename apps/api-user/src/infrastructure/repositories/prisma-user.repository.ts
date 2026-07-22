@@ -37,7 +37,12 @@ export class PrismaUserRepository extends UserRepository {
     await this.prisma.user.delete({ where: { id } });
   }
 
-  async updateLocation(id: string, latitude: number, longitude: number, locationName: string | null): Promise<User> {
+  async updateLocation(
+    id: string,
+    latitude: number,
+    longitude: number,
+    locationName: string | null,
+  ): Promise<User> {
     const user = await this.prisma.user.update({
       where: { id },
       data: { latitude, longitude, locationName, locationUpdatedAt: new Date() },

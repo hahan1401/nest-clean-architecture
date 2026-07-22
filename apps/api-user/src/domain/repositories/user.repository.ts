@@ -7,6 +7,11 @@ export abstract class UserRepository {
   abstract create(data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>): Promise<User>;
   abstract update(id: string, data: Partial<User>): Promise<User>;
   abstract delete(id: string): Promise<void>;
-  abstract updateLocation(id: string, latitude: number, longitude: number, locationName: string | null): Promise<User>;
+  abstract updateLocation(
+    id: string,
+    latitude: number,
+    longitude: number,
+    locationName: string | null,
+  ): Promise<User>;
   abstract findNearby(userId: string, radiusKm: number): Promise<UserWithDistance[]>;
 }

@@ -36,9 +36,7 @@ export class MyVnpayService extends VnPayPort {
       payload?.transactionRef ?? payload?.orderId ?? `ORD-${Date.now()}`,
     );
     const ipAddr =
-      payload?.ipAddr ??
-      this.configService.get<string>('VNPAY_IP_ADDR') ??
-      '127.0.0.1';
+      payload?.ipAddr ?? this.configService.get<string>('VNPAY_IP_ADDR') ?? '127.0.0.1';
     const returnUrl =
       payload?.returnUrl ??
       this.configService.get<string>('VNPAY_RETURN_URL') ??

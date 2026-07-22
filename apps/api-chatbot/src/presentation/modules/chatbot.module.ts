@@ -9,9 +9,6 @@ import { ChatbotController } from '../controllers/chatbot.controller';
 @Module({
   imports: [HttpModule, ConfigModule],
   controllers: [ChatbotController],
-  providers: [
-    { provide: ChatBotServicePort, useClass: ChatBotService },
-    ApiGenerateService,
-  ],
+  providers: [{ provide: ChatBotServicePort, useClass: ChatBotService }, ApiGenerateService],
 })
 export class ChatbotModule {}

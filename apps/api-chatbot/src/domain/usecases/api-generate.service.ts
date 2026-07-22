@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { ChatBotServicePort } from "../ports/chatbot-service.port";
+import { Injectable } from '@nestjs/common';
+import { ChatBotServicePort } from '../ports/chatbot-service.port';
 import { Observable } from 'rxjs';
 
 @Injectable()

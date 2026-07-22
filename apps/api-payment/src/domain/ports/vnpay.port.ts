@@ -1,4 +1,4 @@
-import { Bank } from "vnpay";
+import { Bank } from 'vnpay';
 
 export abstract class VnPayPort {
   abstract getBankLink(): Promise<Bank[]>;

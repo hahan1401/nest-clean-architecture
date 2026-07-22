@@ -13,11 +13,7 @@ export class UpdateLocationService {
     @Inject(GEOCODING_SERVICE) private readonly geocodingClient: ClientProxy,
   ) {}
 
-  async execute(
-    userId: string,
-    latitude: number,
-    longitude: number,
-  ): Promise<User> {
+  async execute(userId: string, latitude: number, longitude: number): Promise<User> {
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundException(`User with id ${userId} not found`);
@@ -47,11 +43,6 @@ export class UpdateLocationService {
     }
 
     const locationName = locationNameArr.filter(Boolean).join(', ') || null;
-    return this.userRepository.updateLocation(
-      userId,
-      latitude,
-      longitude,
-      locationName,
-    );
+    return this.userRepository.updateLocation(userId, latitude, longitude, locationName);
   }
 }

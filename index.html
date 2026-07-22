@@ -1,52 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
-</head>
+  </head>
 
-<body>
-    <strong>Response:
-        <p id="response"></p>
+  <body>
+    <strong
+      >Response:
+      <p id="response"></p>
     </strong>
-</body>
-<script>
+  </body>
+  <script>
     const a = async () => {
-        const response = await fetch('http://localhost:3000/chatbot/sse?prompt=1%2B1', {
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
+      const response = await fetch('http://localhost:3000/chatbot/sse?prompt=1%2B1', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let result = '';
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let result = '';
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-            buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
 
-            const events = buffer.split('\n\n');
-            buffer = events.pop() || '';
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
 
-            for (const evt of events) {
-                const lines = evt.split('\n');
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        result += line.slice(6);
-                    }
-                }
+        for (const evt of events) {
+          const lines = evt.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              result += line.slice(6);
             }
-            document.getElementById('response').textContent = result;
+          }
         }
-    }
+        document.getElementById('response').textContent = result;
+      }
+    };
 
-    a()
-</script>
-
+    a();
+  </script>
 </html>
