@@ -1,4 +1,4 @@
-import { PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
+import { CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
 import { createPinoHttpConfig } from '@app/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -8,6 +8,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { join } from 'path';
 import { PaymentController } from './controllers/payment.controller';
 import { UserController } from './controllers/user.controller';
+import { ChatbotController } from './controllers/chatbot.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -41,8 +42,18 @@ import { UserController } from './controllers/user.controller';
         },
       },
     ]),
+    ClientsModule.register([
+      {
+        name: CHATBOT_SERVICE,
+        transport: Transport.TCP,
+        options: {
+          host: process.env.CHATBOT_SERVICE_HOST || 'localhost',
+          port: parseInt(process.env.CHATBOT_SERVICE_PORT || '3004'),
+        },
+      },
+    ]),
   ],
-  controllers: [UserController, PaymentController],
+  controllers: [UserController, PaymentController, ChatbotController],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

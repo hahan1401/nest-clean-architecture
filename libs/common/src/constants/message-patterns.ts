@@ -18,3 +18,7 @@ export const PAYMENT_PATTERNS = {
   GENERATE_URL: 'generate-url',
   RETURN_URL: 'return-url',
 } as const;
+
+export const CHATBOT_PATTERNS = {
+  ASK_SSE: 'ask-sse',
+} as const;
