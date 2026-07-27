@@ -21,3 +21,28 @@ model User {
 
   @@map("users")
 }
+
+model Document {
+  id        String          @id @default(uuid())
+  fileName  String          @map("file_name")
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
+  chunks    DocumentChunk[]
+
+  @@unique([fileName])
+  @@map("documents")
+}
+
+model DocumentChunk {
+  id         String    @id @default(uuid())
+  documentId String    @map("document_id")
+  chunkIndex Int       @map("chunk_index")
+  content    String
+  embedding  Unsupported("vector(768)")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_chunks")
+}
