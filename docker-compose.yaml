@@ -1,7 +1,7 @@
 services:
-  nest-clean-architecture:
-    image: postgres
-    container_name: nest-clean-architecture
+  nest-clean-architecture-db:
+    image: pgvector/pgvector:pg17
+    container_name: nest-clean-architecture-db
     environment:
       PGDATA: /data/postgres
       POSTGRES_HOST_AUTH_METHOD: "trust"

@@ -18,4 +18,16 @@ export class ChatbotController {
       }),
     );
   }
+
+  @Sse('chatbot/strict-sse')
+  handleStrictRequest(@Query('prompt') prompt: string): Observable<MessageEvent> {
+    return this.chatbotService.send(CHATBOT_PATTERNS.ASK_STRICT_SSE, { prompt }).pipe(
+      map((chunk: any) => ({ data: chunk?.data ?? '' }) as MessageEvent),
+      catchError((err: any) => {
+        return throwError(
+          () => new HttpException(err?.message ?? 'Internal error', err?.status ?? 500),
+        );
+      }),
+    );
+  }
 }

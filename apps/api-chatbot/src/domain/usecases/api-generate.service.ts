@@ -9,4 +9,8 @@ export class ApiGenerateService {
   executeSse(prompt: string): Observable<{ data: string }> {
     return this.chatBotService.apiGenerateSSe(prompt);
   }
+
+  executeStrictSse(prompt: string): Observable<{ data: string }> {
+    return this.chatBotService.apiStrictlyGenerateSSe(prompt);
+  }
 }

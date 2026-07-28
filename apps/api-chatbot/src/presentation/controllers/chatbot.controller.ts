@@ -29,6 +29,18 @@ export class ChatbotController {
     }
   }
 
+  @MessagePattern(CHATBOT_PATTERNS.ASK_STRICT_SSE)
+  askStrictSse(@Payload() data: { prompt: string }): Observable<{ data: string }> {
+    try {
+      return this.apiGenerateService.executeStrictSse(data.prompt);
+    } catch (err: any) {
+      throw new RpcException({
+        status: err?.status ?? 500,
+        message: err?.message ?? 'Failed to process chatbot request',
+      });
+    }
+  }
+
   @MessagePattern(CHATBOT_PATTERNS.UPSERT_DOCUMENT)
   async upsertDocument(@Payload() data: UpsertDocumentInput) {
     try {

@@ -21,6 +21,7 @@ export const PAYMENT_PATTERNS = {
 
 export const CHATBOT_PATTERNS = {
   ASK_SSE: 'ask-sse',
+  ASK_STRICT_SSE: 'ask-strict-sse',
   UPSERT_DOCUMENT: 'upsert-document',
   UPDATE_DOCUMENT: 'update-document',
   DELETE_DOCUMENT: 'delete-document',
