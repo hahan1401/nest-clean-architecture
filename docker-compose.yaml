@@ -4,7 +4,7 @@ services:
     container_name: nest-clean-architecture-db
     environment:
       PGDATA: /data/postgres
-      POSTGRES_HOST_AUTH_METHOD: "trust"
+      POSTGRES_HOST_AUTH_METHOD: 'trust'
     volumes:
       - nest-clean-architecture-db:/data/postgres
     ports:
@@ -16,7 +16,7 @@ services:
     image: ollama/ollama:latest
     container_name: ollama
     ports:
-      - "11434:11434"
+      - '11434:11434'
     volumes:
       - ollama-data:/root/.ollama
     restart: unless-stopped

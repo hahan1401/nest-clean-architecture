@@ -6,7 +6,10 @@ import { ApiGenerateService } from '../../application/usecases/api-generate.serv
 import { UpsertDocumentService } from '../../application/usecases/upsert-document.service';
 import { UpdateDocumentService } from '../../application/usecases/update-document.service';
 import { DeleteDocumentService } from '../../application/usecases/delete-document.service';
-import type { UpdateDocumentInput, UpsertDocumentInput } from '../../domain/ports/chatbot-service.port';
+import type {
+  UpdateDocumentInput,
+  UpsertDocumentInput,
+} from '../../domain/ports/chatbot-service.port';
 
 @Controller()
 export class ChatbotController {

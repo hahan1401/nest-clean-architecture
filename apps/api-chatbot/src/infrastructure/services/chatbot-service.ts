@@ -40,11 +40,7 @@ export class ChatBotService extends ChatBotServicePort {
   async upsertDocument(input: UpsertDocumentInput): Promise<DocumentMutationResult> {
     this.validateContentInput(input.fileName, input.content);
 
-    const chunks = this.splitIntoChunks(
-      input.content,
-      input.chunkSize,
-      input.chunkOverlap,
-    );
+    const chunks = this.splitIntoChunks(input.content, input.chunkSize, input.chunkOverlap);
 
     if (!chunks.length) {
       throw new Error('Document content is empty after chunking');
@@ -77,7 +73,10 @@ export class ChatBotService extends ChatBotServicePort {
         throw new Error('Failed to create or locate document');
       }
 
-      await tx.$executeRawUnsafe('DELETE FROM "document_chunks" WHERE "document_id" = $1', documentId);
+      await tx.$executeRawUnsafe(
+        'DELETE FROM "document_chunks" WHERE "document_id" = $1',
+        documentId,
+      );
       await this.insertChunks(tx, documentId, chunks, embeddings);
 
       return {
@@ -145,7 +144,10 @@ export class ChatBotService extends ChatBotServicePort {
         nextFileName,
         input.id,
       );
-      await tx.$executeRawUnsafe('DELETE FROM "document_chunks" WHERE "document_id" = $1', input.id);
+      await tx.$executeRawUnsafe(
+        'DELETE FROM "document_chunks" WHERE "document_id" = $1',
+        input.id,
+      );
       await this.insertChunks(tx, input.id, chunks, embeddings);
 
       return {
@@ -494,10 +496,7 @@ export class ChatBotService extends ChatBotServicePort {
     }
 
     const context = matches
-      .map(
-        (match, index) =>
-          `[Doc ${index + 1}: ${match.file_name}]\n${match.chunk_content}`,
-      )
+      .map((match, index) => `[Doc ${index + 1}: ${match.file_name}]\n${match.chunk_content}`)
       .join('\n\n');
 
     return [
