@@ -3,24 +3,30 @@
 ## High-Level Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          API Gateway (HTTP :3000)                            │
-│                   Validates requests, proxies to services via TCP            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                    │                                         │
-│                    ┌───────────────┴───────────────┐                         │
-│                    ▼                               ▼                         │
-│   ┌───────────────────────────┐   ┌───────────────────────────┐            │
-│   │   api-user (TCP :3001)    │   │ api-location (TCP :3002)  │            │
-│   │ User CRUD + location ops  │──▶│  Geocoding (reverseGeocode│            │
-│   └───────────────────────────┘   └───────────────────────────┘            │
-│                    │                               │                         │
-│                    └───────────────┬───────────────┘                         │
-│                                    ▼                                         │
-│                         ┌───────────────────┐                               │
-│                         │   PostgreSQL DB    │                               │
-│                         └───────────────────┘                               │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         API Gateway (HTTP :3000)                            │
+│      Validates HTTP requests and forwards to internal TCP microservices     │
+└──────────────────────────────────────────────────────────────────────────────┘
+                  │               │               │
+                  │               │               │
+                  ▼               ▼               ▼
+       ┌─────────────────┐ ┌───────────────┐ ┌─────────────────┐
+       │ api-user :3001  │ │ api-payment   │ │ api-chatbot     │
+       │ User operations │ │ :3003         │ │ :3004           │
+       └───────┬─────────┘ │ VNPay adapter │ │ SSE + RAG docs  │
+               │           └───────────────┘ └─────────────────┘
+               ▼
+       ┌─────────────────┐
+       │ api-location    │
+       │ :3002           │
+       │ reverse geocode │
+       └─────────────────┘
+               │
+               ▼
+       ┌─────────────────┐
+       │ PostgreSQL DB   │
+       │ (Prisma)        │
+       └─────────────────┘
 ```
 
 ## Repository Layout
@@ -28,68 +34,22 @@
 ```
 nest-clean-architecture/
 ├── apps/
-│   ├── api-gateway/              # HTTP entry point (port 3000)
-│   │   └── src/
-│   │       ├── main.ts
-│   │       ├── app.module.ts
-│   │       └── controllers/
-│   │           ├── user.controller.ts
-│   │           └── location.controller.ts
-│   │
-│   ├── api-user/                 # User microservice (TCP port 3001)
-│   │   └── src/
-│   │       ├── main.ts
-│   │       ├── app.module.ts
-│   │       ├── domain/
-│   │       │   ├── repositories/user.repository.ts
-│   │       │   └── usecases/
-│   │       ├── application/
-│   │       │   └── usecases/
-│   │       ├── infrastructure/
-│   │       │   └── repositories/prisma-user.repository.ts
-│   │       └── presentation/
-│   │           ├── controllers/user.controller.ts
-│   │           └── modules/user.module.ts
-│   │
-│   └── api-location/             # Location microservice (TCP port 3002)
-│       └── src/
-│           ├── main.ts
-│           ├── app.module.ts
-│           ├── domain/
-│           │   ├── ports/geocoding.port.ts
-│           │   ├── repositories/location.repository.ts
-│           │   └── usecases/
-│           ├── application/
-│           │   └── usecases/
-│           ├── infrastructure/
-│           │   ├── repositories/prisma-location.repository.ts
-│           │   └── services/nominatim-geocoding.service.ts
-│           └── presentation/
-│               ├── controllers/location.controller.ts
-│               └── modules/location.module.ts
+│   ├── api-gateway/   # HTTP gateway, routes to USER/PAYMENT/CHATBOT services
+│   ├── api-user/      # User service (TCP)
+│   ├── api-location/  # Geocoding service (TCP)
+│   ├── api-payment/   # Payment service (TCP, VNPay integration)
+│   └── api-chatbot/   # Chatbot + document ingestion service (TCP)
 │
 ├── libs/
-│   ├── common/                   # @app/common — shared constants & DTOs
-│   │   └── src/
-│   │       ├── constants/
-│   │       │   ├── message-patterns.ts
-│   │       │   └── services.ts
-│   │       ├── dtos/
-│   │       │   ├── create-user.dto.ts
-│   │       │   ├── update-user.dto.ts
-│   │       │   ├── update-location.dto.ts
-│   │       │   └── user-response.dto.ts
-│   │       └── index.ts
-│   │
-│   └── database/                 # @app/database — Prisma & shared entities
-│       └── src/
-│           ├── prisma.service.ts
-│           ├── database.module.ts
-│           ├── entities/user.entity.ts
-│           └── index.ts
+│   ├── common/        # Shared constants, DTOs, logger config
+│   └── database/      # PrismaService + DatabaseModule + entities
 │
 ├── prisma/
-│   └── schema.prisma
+│   ├── schema.prisma
+│   ├── seed.ts
+│   └── migrations/
+│
+├── docker-compose.yaml
 ├── nest-cli.json
 ├── tsconfig.json
 └── package.json
@@ -99,121 +59,93 @@ nest-clean-architecture/
 
 ## Apps
 
-| App | Port | Transport | Role |
-|-----|------|-----------|------|
-| `api-gateway` | 3000 | HTTP | Entry point; validates requests, proxies to microservices via TCP |
-| `api-user` | 3001 | TCP | User CRUD + location update & nearby-user queries |
-| `api-location` | 3002 | TCP | Pure geocoding service (reverse geocode only) |
+| App | Default Port | Transport | Role |
+|-----|--------------|-----------|------|
+| `api-gateway` | 3000 | HTTP | Entry point, validation, and HTTP-to-TCP proxy |
+| `api-user` | 3001 | TCP | User CRUD, location update, nearby-user queries |
+| `api-location` | 3002 | TCP | Reverse geocoding service |
+| `api-payment` | 3003 | TCP | VNPay operations: bank list, QR, payment URL, return verification |
+| `api-chatbot` | 3004 | TCP | Streaming chatbot responses and document upsert/update/delete |
 
 ---
 
 ## Clean Architecture Per Service
 
-Each microservice (`api-user`, `api-location`) follows the same layered architecture internally:
+The microservices (`api-user`, `api-location`, `api-payment`, `api-chatbot`) follow the same layered structure:
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                    Presentation Layer                     │
-│          (@MessagePattern controllers, Modules)          │
+│                    Presentation Layer                    │
+│         (@MessagePattern controllers, modules)           │
 ├──────────────────────────────────────────────────────────┤
-│                    Application Layer                      │
-│                (Use Cases / Services)                     │
+│                    Application Layer                     │
+│                 (Use case implementations)               │
 ├──────────────────────────────────────────────────────────┤
-│                      Domain Layer                         │
-│      (Repository Contracts, Port Interfaces, Use Case    │
-│       Interfaces) — zero framework dependencies          │
+│                      Domain Layer                        │
+│            (Ports, contracts, use case APIs)             |
+|                zero framework dependencies               │
 ├──────────────────────────────────────────────────────────┤
-│                   Infrastructure Layer                    │
-│     (Prisma Repositories, External Service Adapters)     │
+│                   Infrastructure Layer                   │
+│      (Prisma repos, external adapters: HTTP/VNPay)       │
 └──────────────────────────────────────────────────────────┘
 ```
 
 ### Dependency Rule
 
 ```
-Presentation → Application → Domain ← Infrastructure
+Presentation -> Application -> Domain <- Infrastructure
 ```
 
-Dependencies point **inward only**. Outer layers know about inner layers, but inner layers never reference outer layers.
+Dependencies point inward only.
 
 ---
 
-## Layers (within each microservice)
+## Layer Responsibilities
 
-### 1. Domain Layer (`domain/`)
+### 1) Domain Layer (`domain/`)
 
-The **innermost layer** — pure business logic with **zero external dependencies**.
+- Defines business contracts and use case interfaces.
+- No framework decorators.
+- No infra or transport coupling.
 
-| Folder | Purpose |
-|--------|---------|
-| `repositories/` | Abstract contracts (abstract classes) defining data operations |
-| `ports/` | Abstract contracts for external services (e.g., geocoding) |
-| `usecases/` | Interfaces describing application-level operations |
+Typical folders:
+- `domain/repositories` (when persistence abstractions are needed, eg `api-user`)
+- `domain/ports` (external adapter contracts, eg geocoding, VNPay, chatbot provider)
+- `domain/usecases`
 
-**Rules:**
-- No imports from any other layer or external library
-- No framework decorators
-- Pure TypeScript classes and interfaces
+### 2) Application Layer (`application/`)
 
----
+- Implements use cases with `execute(...)` methods.
+- Orchestrates domain contracts and ports.
+- Contains service-level workflow logic.
 
-### 2. Application Layer (`application/`)
+### 3) Infrastructure Layer (`infrastructure/`)
 
-Contains **application-specific business rules** — orchestrates flow between presentation and domain.
+- Provides concrete implementations of domain contracts.
+- Uses Prisma (`@app/database`) and external integrations (Nominatim, VNPay, Ollama).
 
-| Folder | Purpose |
-|--------|---------|
-| `usecases/` | Service classes implementing workflows (one `execute` method each) |
+### 4) Presentation Layer (`presentation/`)
 
-**Rules:**
-- Depends only on the Domain layer
-- Uses NestJS `@Injectable()` for DI
-- Receives abstract contracts via constructor injection
-- Throws domain-relevant exceptions
-
----
-
-### 3. Infrastructure Layer (`infrastructure/`)
-
-Contains **concrete implementations** of domain abstractions.
-
-| Folder | Purpose |
-|--------|---------|
-| `repositories/` | Prisma-based repository implementations |
-| `services/` | External service adapters (e.g., Nominatim geocoding) |
-
-**Rules:**
-- Implements abstract classes from the Domain layer
-- Imports `PrismaService` from `@app/database`
-- Can be swapped without affecting business logic
-
----
-
-### 4. Presentation Layer (`presentation/`)
-
-The **outermost layer** — handles TCP message patterns and wires everything via NestJS modules.
-
-| Folder | Purpose |
-|--------|---------|
-| `controllers/` | `@MessagePattern` handlers that delegate to use case services |
-| `modules/` | NestJS modules binding abstract contracts to concrete implementations |
-
-**Rules:**
-- Translates incoming TCP messages into use case calls
-- Wraps exceptions as `RpcException` for transport
-- Binds abstractions to implementations in module providers
+- Handles transport concerns (`@MessagePattern` in microservices, HTTP in gateway).
+- Maps transport payloads to use case calls.
+- Converts errors to transport-specific exceptions.
 
 ---
 
 ## API Gateway
 
-The gateway is a **thin HTTP proxy** — no clean architecture layers needed.
+The gateway is intentionally thin and uses three TCP clients:
 
-- Registers `ClientsModule` with a single TCP connection to `api-user`
-- All HTTP routes (including `/users/:id/location` and `/users/:id/nearby`) proxy through `USER_SERVICE`
-- HTTP controllers forward requests via `ClientProxy.send(pattern, data)`
-- Applies `ValidationPipe` globally for request validation using shared DTOs from `@app/common`
-- Catches `RpcException` responses and re-throws as `HttpException`
+- `USER_SERVICE` on `USER_SERVICE_HOST:USER_SERVICE_PORT`
+- `PAYMENT_SERVICE` on `PAYMENT_SERVICE_HOST:PAYMENT_SERVICE_PORT`
+- `CHATBOT_SERVICE` on `CHATBOT_SERVICE_HOST:CHATBOT_SERVICE_PORT`
+
+Key behaviors:
+
+- Applies global `ValidationPipe` (`whitelist + transform`).
+- Uses `CorrelationRequestIdMiddleware` for request correlation.
+- Routes HTTP requests to microservices through `ClientProxy.send(...)`.
+- Exposes SSE endpoints for chatbot streaming.
 
 ---
 
@@ -221,126 +153,147 @@ The gateway is a **thin HTTP proxy** — no clean architecture layers needed.
 
 ### `@app/common`
 
-| Export | Purpose |
-|--------|---------|
-| `USER_PATTERNS` | Message pattern constants for user service (incl. `UPDATE_LOCATION`, `FIND_NEARBY_USERS`) |
-| `GEOCODING_PATTERNS` | Message pattern constants for geocoding service (`REVERSE_GEOCODE`) |
-| `USER_SERVICE` / `GEOCODING_SERVICE` | ClientProxy injection tokens |
-| `CreateUserDto` / `UpdateUserDto` / `UpdateLocationDto` | Request DTOs with `class-validator` decorators |
-| `UserResponseDto` / `UserWithDistanceResponseDto` | Response DTOs |
+Exports:
+
+- Service tokens: `USER_SERVICE`, `GEOCODING_SERVICE`, `PAYMENT_SERVICE`, `CHATBOT_SERVICE`
+- Message pattern groups: `USER_PATTERNS`, `GEOCODING_PATTERNS`, `PAYMENT_PATTERNS`, `CHATBOT_PATTERNS`
+- DTOs used by gateway and user service (`CreateUserDto`, `UpdateUserDto`, `UpdateLocationDto`, response DTOs)
+- Shared pino logger config (`createPinoHttpConfig`)
 
 ### `@app/database`
 
-| Export | Purpose |
-|--------|---------|
-| `PrismaService` | Prisma client lifecycle management |
-| `DatabaseModule` | Global module providing `PrismaService` |
-| `User` / `UserWithDistance` | Domain entity classes (shared since both services operate on same table) |
+Exports:
+
+- `PrismaService`
+- `DatabaseModule`
+- Shared entities/types used across services
 
 ### Logging Strategy
 
-- Every app uses a shared `nestjs-pino` HTTP config from `libs/common/src/logger`.
-- Logs are structured in production and pretty-printed only outside production for local development.
-- The gateway adds a generated `requestId` to each incoming request and the value is included in serialized logs and downstream payloads where needed.
-- Each app uses its own service label in the log message prefix so traces are easy to scan across services.
-- Prefer explicit domain or workflow logs over noisy automatic request logging.
+- All apps use `nestjs-pino`.
+- Service label is set per app (`API-GATEWAY`, `API-USER`, `API-LOCATION`, `API-PAYMENT`, `API-CHATBOT`).
+- Request correlation is added in gateway middleware and can be propagated downstream.
 
 ---
 
 ## Message Patterns
 
-### User Service (api-user)
+### User Service (`api-user`)
 
 | Pattern | Payload | Description |
 |---------|---------|-------------|
-| `create_user` | `{ name, email, password }` | Create a new user |
-| `get_users` | `{}` | Get all users |
-| `get_user_by_id` | `id: string` | Get user by ID |
-| `update_user` | `{ id, updateData }` | Update user fields |
+| `create_user` | `{ name, email, password }` | Create user |
+| `get_users` | `{}` | List users |
+| `get_user_by_id` | `id: string` | Get user by id |
+| `update_user` | `{ id, updateData, requestId? }` | Update user |
 | `delete_user` | `id: string` | Delete user |
-| `update_location` | `{ id, latitude, longitude }` | Update user location (calls geocoding service internally) |
-| `find_nearby_users` | `{ id, radius }` | Find users within radius (km) |
+| `update_location` | `{ id, latitude, longitude }` | Update coordinates + reverse geocode |
+| `find_nearby_users` | `{ id, radius }` | Find nearby users |
 
-### Geocoding Service (api-location)
+### Geocoding Service (`api-location`)
 
 | Pattern | Payload | Description |
 |---------|---------|-------------|
-| `reverse_geocode` | `{ latitude, longitude }` | Resolve coordinates to a human-readable location name |
+| `reverse_geocode` | `{ latitude, longitude }` | Resolve coordinates to location label |
+
+### Payment Service (`api-payment`)
+
+| Pattern | Payload | Description |
+|---------|---------|-------------|
+| `bank-list` | `{}` | VNPay bank list |
+| `generate-qr` | custom payload | Generate VNPay QR |
+| `generate-url` | custom payload | Build hosted VNPay payment URL |
+| `return-url` | custom payload | Verify VNPay return URL data |
+
+### Chatbot Service (`api-chatbot`)
+
+| Pattern | Payload | Description |
+|---------|---------|-------------|
+| `ask-sse` | `{ prompt }` | Stream answer chunks |
+| `ask-strict-sse` | `{ prompt }` | Stream answer constrained by internal docs |
+| `upsert-document` | `{ fileName, content, ... }` | Insert/replace document chunks + embeddings |
+| `update-document` | `{ id, ... }` | Update document metadata/content |
+| `delete-document` | `{ id }` | Delete document |
 
 ---
 
-## API Endpoints (via api-gateway)
+## HTTP Endpoints (Gateway)
 
-| Method | Path | Proxies To | Description |
-|--------|------|-----------|-------------|
-| `POST` | `/users` | `api-user` → `create_user` | Create user |
-| `GET` | `/users` | `api-user` → `get_users` | List all users |
-| `GET` | `/users/:id` | `api-user` → `get_user_by_id` | Get user by ID |
-| `PUT` | `/users/:id` | `api-user` → `update_user` | Update user |
-| `DELETE` | `/users/:id` | `api-user` → `delete_user` | Delete user |
-| `PATCH` | `/users/:id/location` | `api-user` → `update_location` | Update location |
-| `GET` | `/users/:id/nearby` | `api-user` → `find_nearby_users` | Find nearby users |
+### User Endpoints
+
+| Method | Path | Proxy Pattern |
+|--------|------|---------------|
+| `POST` | `/users` | `create_user` |
+| `GET` | `/users` | `get_users` |
+| `GET` | `/users/:id` | `get_user_by_id` |
+| `PUT` | `/users/:id` | `update_user` |
+| `DELETE` | `/users/:id` | `delete_user` |
+| `PATCH` | `/users/:id/location` | `update_location` |
+| `GET` | `/users/:id/nearby?radius=10` | `find_nearby_users` |
+
+### Payment Endpoints
+
+| Method | Path | Proxy Pattern |
+|--------|------|---------------|
+| `GET` | `/payment/bank-list` | `bank-list` |
+| `POST` | `/payment/generate-qr` | `generate-qr` |
+| `POST` | `/payment/generate-payment-url` | `generate-url` |
+| `POST` | `/payment/generate-return-url` | `return-url` |
+| `GET` | `/payment/ipn` | currently returns query payload from gateway |
+
+### Chatbot Endpoints
+
+| Method | Path | Proxy Pattern |
+|--------|------|---------------|
+| `GET` | `/chatbot/sse?prompt=...` | `ask-sse` |
+| `GET` | `/chatbot/strict-sse?prompt=...` | `ask-strict-sse` |
 
 ---
 
-## How Dependency Injection Connects the Layers
+## Dependency Injection Example (User Service)
 
-In `apps/api-user/src/presentation/modules/user.module.ts`:
+The user module binds abstractions to concrete implementations:
 
-```typescript
-@Module({
-  imports: [
-    DatabaseModule,
-    ClientsModule.register([{ name: GEOCODING_SERVICE, transport: Transport.TCP, ... }]),
-  ],
-  controllers: [UserController],
-  providers: [
-    { provide: UserRepository, useClass: PrismaUserRepository },
-    CreateUserService,
-    GetUsersService,
-    GetUserByIdService,
-    UpdateUserService,
-    DeleteUserService,
-    UpdateLocationService,
-    FindNearbyUsersService,
-  ],
-})
-export class UserModule {}
-```
+- `UserRepository -> PrismaUserRepository`
+- `GEOCODING_SERVICE` TCP client injected for reverse geocoding
+- Use-case services registered as providers
 
-The Application layer injects `UserRepository` (abstract) — it never knows about Prisma. The module binds the concrete `PrismaUserRepository` at runtime. `UpdateLocationService` additionally receives the `GEOCODING_SERVICE` `ClientProxy` to call `api-location` for reverse geocoding.
+This keeps application logic independent of Prisma and transport details.
 
 ---
 
 ## Inter-Service Communication
 
-`api-user` acts as a consumer of `api-location` for the reverse geocoding step inside `UpdateLocationService`:
+Main internal call chain today:
 
 ```
-Gateway ──TCP──▶ api-user (update_location)
-                    │
-                    └──TCP──▶ api-location (reverse_geocode)
-                                    │
-                              NominatimGeocodingService
-                              (external HTTP → openstreetmap.org)
+Gateway --TCP--> api-user (update_location)
+                    |
+                    +--TCP--> api-location (reverse_geocode)
+                                  |
+                                  +--HTTP--> OpenStreetMap Nominatim
 ```
 
-If `api-location` is unavailable, `UpdateLocationService` gracefully degrades: the location is saved with `locationName: null` rather than failing the request.
+If geocoding is unavailable, user location updates are designed to degrade gracefully (location name may be null).
 
 ---
 
 ## Common Commands
 
 ```bash
-# Start individual services
-npm run start:user          # TCP on port 3001
-npm run start:location      # TCP on port 3002
-npm run start:gateway       # HTTP on port 3000
+# Start services in watch mode
+npm run gateway:dev
+npm run user:dev
+npm run location:dev
+npm run payment:dev
+npm run chatbot:dev
 
-# Build
+# Build individual apps
+npm run build:gateway
 npm run build:user
 npm run build:location
-npm run build:gateway
+npm run build:payment
+npm run build:chatbot
 
 # Start PostgreSQL
 docker compose up -d
@@ -352,20 +305,26 @@ docker compose up -d
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `PORT` | `3000` | api-gateway |
+| `GATEWAY_PORT` | `3000` | api-gateway |
 | `USER_SERVICE_HOST` | `localhost` | api-gateway |
 | `USER_SERVICE_PORT` | `3001` | api-gateway, api-user |
-| `LOCATION_SERVICE_HOST` | `localhost` | api-user (for GEOCODING_SERVICE client) |
-| `LOCATION_SERVICE_PORT` | `3002` | api-user (for GEOCODING_SERVICE client), api-location |
-| `DATABASE_URL` | — | @app/database (all services) |
+| `PAYMENT_SERVICE_HOST` | `localhost` | api-gateway |
+| `PAYMENT_SERVICE_PORT` | `3003` | api-gateway, api-payment |
+| `CHATBOT_SERVICE_HOST` | `localhost` | api-gateway |
+| `CHATBOT_SERVICE_PORT` | `3004` | api-gateway, api-chatbot |
+| `LOCATION_SERVICE_PORT` | `3002` | api-user, api-location |
+| `HOST_NAME` | (required in current user->location client config) | api-user |
+| `DATABASE_URL` | - | services using `@app/database` |
+| `OLLAMA_API_URL` | - | api-chatbot |
+| `vnp_HashSecret` / `vnp_TmnCode` | - | api-payment |
+| `VNPAY_RETURN_URL` / `VNPAY_IP_ADDR` | optional | api-payment |
 
 ---
 
 ## Benefits
 
-- **Independent deployment** — Each service can be built, tested, and deployed separately
-- **Testability** — Mock repository contracts to unit test use cases without a database
-- **Flexibility** — Swap Prisma for another ORM by only changing the Infrastructure layer
-- **Maintainability** — Business rules are isolated within each service's domain layer
-- **Scalability** — Scale individual services based on load; add new microservices following the same pattern
-- **Fault isolation** — A failure in the location service doesn't take down user operations
+- Independent deployability per service.
+- Testable application layer through domain contracts.
+- Replaceable infrastructure adapters without rewriting use cases.
+- Clear separation of transport, business logic, and integration logic.
+- Fault isolation across geocoding, payment, and chatbot concerns.
