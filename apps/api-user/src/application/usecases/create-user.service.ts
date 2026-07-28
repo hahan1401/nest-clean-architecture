@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { User } from '@app/database';
 import { UserRepository } from '../../domain/repositories/user.repository';
+import { CreateUserUseCase } from '../../domain/usecases/create-user.usecase';
 
 @Injectable()
-export class CreateUserService {
+export class CreateUserService implements CreateUserUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
   async execute(data: { name: string; email: string; password: string }): Promise<User> {

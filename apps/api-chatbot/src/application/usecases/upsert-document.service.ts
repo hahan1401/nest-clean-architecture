@@ -3,7 +3,7 @@ import {
   ChatBotServicePort,
   DocumentMutationResult,
   UpsertDocumentInput,
-} from '../ports/chatbot-service.port';
+} from '../../domain/ports/chatbot-service.port';
 
 @Injectable()
 export class UpsertDocumentService {

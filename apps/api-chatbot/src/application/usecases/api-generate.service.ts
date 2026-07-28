@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ChatBotServicePort } from '../ports/chatbot-service.port';
 import { Observable } from 'rxjs';
+import { ChatBotServicePort } from '../../domain/ports/chatbot-service.port';
+import { ApiGenerateUseCase } from '../../domain/usecases/api-generate.usecase';
 
 @Injectable()
-export class ApiGenerateService {
+export class ApiGenerateService implements ApiGenerateUseCase {
   constructor(private readonly chatBotService: ChatBotServicePort) {}
 
   executeSse(prompt: string): Observable<{ data: string }> {

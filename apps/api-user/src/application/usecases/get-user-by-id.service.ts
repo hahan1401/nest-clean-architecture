@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { User } from '@app/database';
 import { UserRepository } from '../../domain/repositories/user.repository';
+import { GetUserByIdUseCase } from '../../domain/usecases/get-user-by-id.usecase';
 
 @Injectable()
-export class GetUserByIdService {
+export class GetUserByIdService implements GetUserByIdUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
   async execute(id: string): Promise<User> {

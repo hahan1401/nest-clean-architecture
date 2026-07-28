@@ -2,10 +2,10 @@ import { CHATBOT_PATTERNS } from '@app/common';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { Observable } from 'rxjs';
-import { ApiGenerateService } from '../../domain/usecases/api-generate.service';
-import { UpsertDocumentService } from '../../domain/usecases/upsert-document.service';
-import { UpdateDocumentService } from '../../domain/usecases/update-document.service';
-import { DeleteDocumentService } from '../../domain/usecases/delete-document.service';
+import { ApiGenerateService } from '../../application/usecases/api-generate.service';
+import { UpsertDocumentService } from '../../application/usecases/upsert-document.service';
+import { UpdateDocumentService } from '../../application/usecases/update-document.service';
+import { DeleteDocumentService } from '../../application/usecases/delete-document.service';
 import type { UpdateDocumentInput, UpsertDocumentInput } from '../../domain/ports/chatbot-service.port';
 
 @Controller()

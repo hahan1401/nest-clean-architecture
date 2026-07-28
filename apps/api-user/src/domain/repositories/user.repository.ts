@@ -13,5 +13,5 @@ export abstract class UserRepository {
     longitude: number,
     locationName: string | null,
   ): Promise<User>;
-  abstract findNearby(userId: string, radiusKm: number): Promise<UserWithDistance[]>;
+  abstract findNearby(userId: string, radiusKm?: number): Promise<UserWithDistance[]>;
 }

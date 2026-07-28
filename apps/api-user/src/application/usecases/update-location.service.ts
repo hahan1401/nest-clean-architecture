@@ -1,13 +1,14 @@
+import { GEOCODING_PATTERNS, GEOCODING_SERVICE } from '@app/common';
+import { User } from '@app/database';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { catchError, firstValueFrom, of } from 'rxjs';
-import { User } from '@app/database';
-import { GEOCODING_SERVICE, GEOCODING_PATTERNS } from '@app/common';
-import { UserRepository } from '../../domain/repositories/user.repository';
 import { NominatimResponse } from 'libs/types/api-location/common';
+import { catchError, firstValueFrom, of } from 'rxjs';
+import { UserRepository } from '../../domain/repositories/user.repository';
+import { UpdateLocationUseCase } from '../../domain/usecases/update-location.usecase';
 
 @Injectable()
-export class UpdateLocationService {
+export class UpdateLocationService implements UpdateLocationUseCase {
   constructor(
     private readonly userRepository: UserRepository,
     @Inject(GEOCODING_SERVICE) private readonly geocodingClient: ClientProxy,
