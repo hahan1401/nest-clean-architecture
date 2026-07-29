@@ -9,12 +9,14 @@ import { DatabaseModule } from '@app/database';
 import { UpsertDocumentService } from '../../application/usecases/upsert-document.service';
 import { UpdateDocumentService } from '../../application/usecases/update-document.service';
 import { DeleteDocumentService } from '../../application/usecases/delete-document.service';
+import { GeminiAIService } from '../../infrastructure/services/gemini-ai.service';
 
 @Module({
   imports: [HttpModule, ConfigModule, DatabaseModule],
   controllers: [ChatbotController],
   providers: [
     { provide: ChatBotServicePort, useClass: ChatBotService },
+    { provide: GeminiAIService, useClass: GeminiAIService },
     ApiGenerateService,
     UpsertDocumentService,
     UpdateDocumentService,
