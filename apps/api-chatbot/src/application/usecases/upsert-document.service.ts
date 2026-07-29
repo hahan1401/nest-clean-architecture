@@ -4,12 +4,16 @@ import {
   DocumentMutationResult,
   UpsertDocumentInput,
 } from '../../domain/ports/chatbot-service.port';
+import { GeminiAIService } from '../../infrastructure/services/gemini-ai.service';
 
 @Injectable()
 export class UpsertDocumentService {
-  constructor(private readonly chatBotService: ChatBotServicePort) {}
+  constructor(
+    private readonly chatBotService: ChatBotServicePort,
+    private readonly geminiAIService: GeminiAIService,
+  ) {}
 
   execute(input: UpsertDocumentInput): Promise<DocumentMutationResult> {
-    return this.chatBotService.upsertDocument(input);
+    return this.geminiAIService.upsertDocument(input);
   }
 }

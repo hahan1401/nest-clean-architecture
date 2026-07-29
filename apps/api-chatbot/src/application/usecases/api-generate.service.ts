@@ -16,6 +16,6 @@ export class ApiGenerateService implements ApiGenerateUseCase {
   }
 
   executeStrictSse(prompt: string): Observable<{ data: string }> {
-    return this.chatBotService.apiStrictlyGenerateSSe(prompt);
+    return this.geminiAIService.apiStrictlyGenerateSSe(prompt);
   }
 }

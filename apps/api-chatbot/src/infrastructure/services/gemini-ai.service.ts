@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import {
   ChatBotServicePort,
@@ -8,10 +8,35 @@ import {
   UpsertDocumentInput,
 } from '../../domain/ports/chatbot-service.port';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '@app/database';
+
+type DocumentRow = {
+  id: string;
+  file_name: string;
+};
+
+type RetrievedChunkRow = {
+  chunk_content: string;
+  file_name: string;
+  similarity: number;
+  chunk_id?: string;
+  chunk_index?: number;
+};
 
 @Injectable()
 export class GeminiAIService extends ChatBotServicePort {
-  constructor(private readonly configService: ConfigService) {
+  private readonly DEFAULT_CHUNK_SIZE = 1000;
+  private readonly DEFAULT_CHUNK_OVERLAP = 100;
+  private readonly DEFAULT_MATCH_COUNT = 5;
+  private readonly DEFAULT_MAX_DISTANCE = 1;
+  private readonly FALLBACK_MESSAGE = 'I cannot find this information in internal documents.';
+  private readonly logger = new Logger(GeminiAIService.name);
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly prismaService: PrismaService,
+  ) {
     super();
   }
 
@@ -23,38 +48,307 @@ export class GeminiAIService extends ChatBotServicePort {
     return new GoogleGenAI({ apiKey });
   }
 
+  private getMaxDistance(): number {
+    const configured = this.configService.get<string>('CHATBOT_MAX_VECTOR_DISTANCE');
+
+    if (!configured) {
+      return this.DEFAULT_MAX_DISTANCE;
+    }
+
+    const parsed = Number(configured);
+
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : this.DEFAULT_MAX_DISTANCE;
+  }
+
+  private getMatchCount(): number {
+    const configured = this.configService.get<string>('CHATBOT_MATCH_COUNT');
+
+    if (!configured) {
+      return this.DEFAULT_MATCH_COUNT;
+    }
+
+    const parsed = Number(configured);
+
+    return Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 20) : this.DEFAULT_MATCH_COUNT;
+  }
+
+  private validateContentInput(fileName: string, content: string) {
+    if (!fileName?.trim()) {
+      throw new Error('fileName is required');
+    }
+
+    if (!content?.trim()) {
+      throw new Error('content is required');
+    }
+  }
+
+  private splitIntoChunks(
+    text: string,
+    size = this.DEFAULT_CHUNK_SIZE,
+    overlap = this.DEFAULT_CHUNK_OVERLAP,
+  ): string[] {
+    if (size <= 0) {
+      throw new Error('chunkSize must be greater than 0');
+    }
+
+    if (overlap < 0 || overlap >= size) {
+      throw new Error('chunkOverlap must be between 0 and chunkSize - 1');
+    }
+
+    const normalized = text.trim();
+
+    if (!normalized) {
+      return [];
+    }
+
+    const chunks: string[] = [];
+    let start = 0;
+    const step = size - overlap;
+
+    while (start < normalized.length) {
+      const chunk = normalized.slice(start, start + size).trim();
+      if (chunk) {
+        chunks.push(chunk);
+      }
+      start += step;
+    }
+
+    return chunks;
+  }
+
+  private async createEmbeddings(chunks: string[]): Promise<number[][]> {
+    const embeddings: number[][] = [];
+
+    for (const chunk of chunks) {
+      const vector = await this.embedChunk(chunk);
+      embeddings.push(vector);
+    }
+
+    return embeddings;
+  }
+
+  private async embedChunk(chunk: string): Promise<number[]> {
+    const embeddingModel = 'gemini-embedding-2';
+
+    const response = await this.ai.models.embedContent({
+      model: embeddingModel,
+      contents: chunk,
+    });
+
+    if (!response.sdkHttpResponse?.headers?.ok) {
+      throw new Error(
+        `Gemini AI embed request failed with status ${response.sdkHttpResponse?.headers?.status}`,
+      );
+    }
+
+    const embedding = response?.embeddings?.[0]?.values;
+
+    if (!embedding || !Array.isArray(embedding) || !embedding.length) {
+      throw new Error('Invalid embedding response from Gemini AI');
+    }
+
+    return embedding;
+  }
+
+  private async insertChunks(
+    tx: Prisma.TransactionClient,
+    documentId: string,
+    chunks: string[],
+    embeddings: number[][],
+  ) {
+    for (let index = 0; index < chunks.length; index += 1) {
+      const vectorLiteral = this.toVectorLiteral(embeddings[index]);
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO 
+            "document_chunks" ("document_id", "chunk_index", "content", "embedding", "created_at") 
+            VALUES ($1, $2, $3, $4::vector, NOW())`,
+        documentId,
+        index,
+        chunks[index],
+        vectorLiteral,
+      );
+    }
+  }
+
+  private toVectorLiteral(values: number[]): string {
+    if (!values.length || values.some((value) => !Number.isFinite(value))) {
+      throw new Error('Embedding vector contains invalid values');
+    }
+
+    return `[${values.join(',')}]`;
+  }
+
+  private async searchRelevantChunks(questionEmbedding: number[]): Promise<RetrievedChunkRow[]> {
+    const matchCount = this.getMatchCount();
+    const maxDistance = this.getMaxDistance();
+
+    const vectorLiteral = this.toVectorLiteral(questionEmbedding);
+
+    return this.prismaService.$queryRawUnsafe<RetrievedChunkRow[]>(
+      `
+      SELECT
+        dc."id" AS "chunk_id",
+        dc."content" AS "chunk_content",
+        dc."chunk_index" AS "chunk_index",
+        d."file_name" AS "file_name",
+        (dc."embedding" <=> $1::vector) AS "similarity"
+      FROM "document_chunks" dc
+      INNER JOIN "documents" d
+        ON d."id" = dc."document_id"
+      WHERE (dc."embedding" <=> $1::vector) <= $2
+      ORDER BY dc."embedding" <=> $1::vector ASC
+      LIMIT $3
+    `,
+      vectorLiteral,
+      maxDistance,
+      matchCount,
+    );
+  }
+
+  private async buildGroundedPrompt(question: string): Promise<string | null> {
+    if (!question?.trim()) {
+      return null;
+    }
+
+    const questionEmbedding = await this.embedChunk(question.trim());
+
+    const matches = await this.searchRelevantChunks(questionEmbedding);
+
+    if (!matches.length) {
+      return null;
+    }
+
+    const context = matches
+      .map((match, index) => {
+        return `[Chunk ${index + 1}] Source: ${match.file_name}  ${match.chunk_content}`;
+      })
+      .join('\n\n');
+
+    return `
+      You are an internal document assistant.
+
+      VERY IMPORTANT RULES:
+
+      1. Answer ONLY from the CONTEXT.
+      2. Never use external knowledge.
+      3. Never guess.
+      4. Never assume.
+      5. If the answer is not explicitly found in the CONTEXT, reply exactly:
+
+      ${this.FALLBACK_MESSAGE}
+
+      CONTEXT:
+
+      ${context}
+
+      QUESTION:
+
+      ${question}
+
+      ANSWER:
+    `.trim();
+  }
+
   apiGenerateSSe(prompt: string): Observable<{ data: string }> {
     return new Observable((observer) => {
+      let isCancelled = false;
+
       (async () => {
-        const stream = await this.ai.interactions.create({
-          model: 'gemini-3.6-flash',
-          input: prompt,
-          stream: true,
-        });
-        let n = 0;
-        for await (const event of stream) {
-          console.log('Event:', event);
-          if (event.event_type === 'step.delta' && event.delta.type === 'text') {
-            observer.next({ data: event.delta.text });
+        try {
+          const stream = await this.ai.interactions.create({
+            model: 'gemini-3.6-flash',
+            input: prompt,
+            stream: true,
+          });
+
+          for await (const event of stream) {
+            if (isCancelled) {
+              break;
+            }
+
+            if (event.event_type === 'step.delta' && event.delta.type === 'text') {
+              observer.next({ data: event.delta.text });
+            }
           }
-          continue;
+
+          if (!isCancelled) {
+            observer.complete();
+          }
+        } catch (error) {
+          if (!isCancelled) {
+            observer.error(error);
+          }
         }
-        observer.complete();
       })();
+
       return () => {
+        isCancelled = true;
         console.log('Observable unsubscribed');
       };
     });
   }
   apiStrictlyGenerateSSe(prompt: string): Observable<{ data: string }> {
     return new Observable((observer) => {
-      // Simulate an asynchronous operation (e.g., API call)
-      setTimeout(() => {
-        // Simulated response data
-        const responseData = { data: `Strictly generated response for prompt: ${prompt}` };
-        observer.next(responseData);
-        observer.complete();
-      }, 1000); // Simulate a 1-second delay
+      (async () => {
+        try {
+          let groundedPrompt: string | null;
+
+          try {
+            groundedPrompt = await this.buildGroundedPrompt(prompt);
+            this.logger.log(`Grounded Prompt: ${groundedPrompt}`);
+          } catch (error) {
+            this.logger.error('Failed to build grounded prompt', error);
+            throw error;
+          }
+
+          if (!groundedPrompt) {
+            observer.next({
+              data: this.FALLBACK_MESSAGE,
+            });
+
+            observer.complete();
+            return;
+          }
+
+          try {
+            const stream = await this.ai.models.generateContentStream({
+              model: 'gemini-3.6-flash',
+              contents: groundedPrompt,
+            });
+
+            for await (const chunk of stream) {
+              const text = chunk.text;
+
+              if (text) {
+                observer.next({
+                  data: text,
+                });
+              }
+            }
+
+            observer.complete();
+          } catch (error) {
+            this.logger.error('Failed while streaming AI response', error);
+            throw error;
+          }
+        } catch (error) {
+          this.logger.error('apiStrictlyGenerateSSe error', error);
+
+          observer.next({
+            data: this.FALLBACK_MESSAGE,
+          });
+
+          observer.complete();
+
+          // Alternative:
+          // observer.error(error);
+        }
+      })();
+
+      return () => {
+        this.logger.log('Observable unsubscribed');
+      };
     });
   }
   deleteDocument(id: string): Promise<{ documentId: string; deleted: true }> {
@@ -78,17 +372,60 @@ export class GeminiAIService extends ChatBotServicePort {
       }, 1000); // Simulate a 1-second delay
     });
   }
-  upsertDocument(input: UpsertDocumentInput): Promise<DocumentMutationResult> {
-    return new Promise((resolve) => {
-      // Simulate an asynchronous operation (e.g., database upsert)
-      setTimeout(() => {
-        const result: DocumentMutationResult = {
-          documentId: 'generated-document-id',
-          fileName: input.fileName,
-          chunkCount: 1, // Simulated chunk count
-        };
-        resolve(result);
-      }, 1000); // Simulate a 1-second delay
+
+  async upsertDocument(input: UpsertDocumentInput): Promise<DocumentMutationResult> {
+    this.validateContentInput(input.fileName, input.content);
+
+    const chunks = this.splitIntoChunks(input.content, input.chunkSize, input.chunkOverlap);
+
+    if (!chunks.length) {
+      throw new Error('Document content is empty after chunking');
+    }
+
+    const embeddings = await this.createEmbeddings(chunks);
+
+    return this.prismaService.$transaction(async (tx) => {
+      const existing = await tx.$queryRawUnsafe<DocumentRow[]>(
+        'SELECT "id", "file_name" FROM "documents" WHERE "file_name" = $1 LIMIT 1',
+        input.fileName,
+      );
+      let documentId = existing[0]?.id;
+
+      if (!documentId) {
+        try {
+          const inserted = await tx.$queryRawUnsafe<DocumentRow[]>(
+            `INSERT INTO 
+                "documents" ("file_name", "created_at", "updated_at") 
+                VALUES ($1, NOW(), NOW()) 
+                RETURNING "id", "file_name"`,
+            input.fileName,
+          );
+          documentId = inserted[0]?.id;
+        } catch (error: any) {
+          this.logger.error(`Error inserting document "${input.fileName}":`, error);
+          throw new Error(`Failed to insert document`);
+        }
+      } else {
+        await tx.$executeRawUnsafe(
+          'UPDATE "documents" SET "updated_at" = NOW() WHERE "id" = $1',
+          documentId,
+        );
+      }
+
+      if (!documentId) {
+        throw new Error('Failed to create or locate document');
+      }
+
+      await tx.$executeRawUnsafe(
+        'DELETE FROM "document_chunks" WHERE "document_id" = $1',
+        documentId,
+      );
+      await this.insertChunks(tx, documentId, chunks, embeddings);
+      return {
+        documentId,
+        fileName: input.fileName,
+        chunkCount: chunks.length,
+      };
     });
   }
 }

@@ -504,7 +504,6 @@ export class ChatBotService extends ChatBotServicePort {
 
     const questionEmbedding = await this.embedChunk(question.trim());
     const matches = await this.searchRelevantChunks(questionEmbedding);
-    console.log('~~~~', matches);
 
     if (!matches.length) {
       return null;
