@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   ChatBotServicePort,
   DocumentMutationResult,
@@ -19,6 +19,8 @@ type RetrievedChunkRow = {
   chunk_content: string;
   file_name: string;
   similarity: number;
+  chunk_id?: string;
+  chunk_index?: number;
 };
 
 @Injectable()
@@ -26,9 +28,11 @@ export class ChatBotService extends ChatBotServicePort {
   private static readonly DEFAULT_CHUNK_SIZE = 1000;
   private static readonly DEFAULT_CHUNK_OVERLAP = 100;
   private static readonly DEFAULT_MATCH_COUNT = 5;
-  private static readonly DEFAULT_MAX_DISTANCE = 0.35;
+  private static readonly DEFAULT_MAX_DISTANCE = 1;
   private static readonly FALLBACK_MESSAGE =
     'I cannot find this information in internal documents.';
+
+  private readonly logger = new Logger(ChatBotService.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -53,15 +57,22 @@ export class ChatBotService extends ChatBotServicePort {
         'SELECT "id", "file_name" FROM "documents" WHERE "file_name" = $1 LIMIT 1',
         input.fileName,
       );
-
       let documentId = existing[0]?.id;
 
       if (!documentId) {
-        const inserted = await tx.$queryRawUnsafe<DocumentRow[]>(
-          'INSERT INTO "documents" ("file_name", "created_at", "updated_at") VALUES ($1, NOW(), NOW()) RETURNING "id", "file_name"',
-          input.fileName,
-        );
-        documentId = inserted[0]?.id;
+        try {
+          const inserted = await tx.$queryRawUnsafe<DocumentRow[]>(
+            `INSERT INTO 
+              "documents" ("file_name", "created_at", "updated_at") 
+              VALUES ($1, NOW(), NOW()) 
+              RETURNING "id", "file_name"`,
+            input.fileName,
+          );
+          documentId = inserted[0]?.id;
+        } catch (error: any) {
+          this.logger.error(`Error inserting document "${input.fileName}":`, error);
+          throw new Error(`Failed to insert document`);
+        }
       } else {
         await tx.$executeRawUnsafe(
           'UPDATE "documents" SET "updated_at" = NOW() WHERE "id" = $1',
@@ -78,7 +89,6 @@ export class ChatBotService extends ChatBotServicePort {
         documentId,
       );
       await this.insertChunks(tx, documentId, chunks, embeddings);
-
       return {
         documentId,
         fileName: input.fileName,
@@ -287,6 +297,8 @@ export class ChatBotService extends ChatBotServicePort {
             return;
           }
 
+          console.log('~~~~ Grounded Prompt:', groundedPrompt);
+
           const response = await fetch(`${this.configService.get('OLLAMA_API_URL')}/generate`, {
             method: 'POST',
             headers: {
@@ -466,7 +478,9 @@ export class ChatBotService extends ChatBotServicePort {
       const vectorLiteral = this.toVectorLiteral(embeddings[index]);
 
       await tx.$executeRawUnsafe(
-        'INSERT INTO "document_chunks" ("document_id", "chunk_index", "content", "embedding", "created_at") VALUES ($1, $2, $3, $4::vector, NOW())',
+        `INSERT INTO 
+          "document_chunks" ("document_id", "chunk_index", "content", "embedding", "created_at") 
+          VALUES ($1, $2, $3, $4::vector, NOW())`,
         documentId,
         index,
         chunks[index],
@@ -490,13 +504,14 @@ export class ChatBotService extends ChatBotServicePort {
 
     const questionEmbedding = await this.embedChunk(question.trim());
     const matches = await this.searchRelevantChunks(questionEmbedding);
+    console.log('~~~~', matches);
 
     if (!matches.length) {
       return null;
     }
 
     const context = matches
-      .map((match, index) => `[Doc ${index + 1}: ${match.file_name}]\n${match.chunk_content}`)
+      .map((match, index) => `[Chunk ${index + 1} - ID: ${match.chunk_id} (Index: ${match.chunk_index}) - ${match.file_name}]\n${match.chunk_content}`)
       .join('\n\n');
 
     return [
@@ -523,17 +538,17 @@ export class ChatBotService extends ChatBotServicePort {
     return this.prismaService.$queryRawUnsafe<RetrievedChunkRow[]>(
       `
       SELECT
+        dc."id" AS "chunk_id",
         dc."content" AS "chunk_content",
+        dc."chunk_index" AS "chunk_index",
         d."file_name" AS "file_name",
         (dc."embedding" <=> $1::vector) AS "similarity"
       FROM "document_chunks" dc
       INNER JOIN "documents" d ON d."id" = dc."document_id"
-      WHERE (dc."embedding" <=> $1::vector) <= $2
       ORDER BY dc."embedding" <=> $1::vector ASC
-      LIMIT $3
+      LIMIT $2
       `,
       vectorLiteral,
-      maxDistance,
       matchCount,
     );
   }

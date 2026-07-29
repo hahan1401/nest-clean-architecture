@@ -7,14 +7,27 @@
   </head>
 
   <body>
+
+    <form id="upload-form">
+      <input type="file" id="upload-file" />
+      <button type="submit">Upload</button>
+    </form>
+
+    <input type="text" id="prompt" placeholder="Enter your prompt" />
+    <button id="ask-button">Ask Chatbot</button>
+    <button id="ask-button-strict">Ask Strict Chatbot</button>
+    <br>
     <strong
       >Response:
       <p id="response"></p>
     </strong>
   </body>
   <script>
-    const a = async () => {
-      const response = await fetch('http://localhost:3000/chatbot/sse?prompt=1%2B1', {
+    const askChatbot = async (prompt, strict = false) => {
+      const url = strict
+        ? `http://localhost:3000/chatbot/strict-sse?prompt=${encodeURIComponent(prompt)}`
+        : `http://localhost:3000/chatbot/sse?prompt=${encodeURIComponent(prompt)}`;
+      const response = await fetch(url, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -45,7 +58,35 @@
         document.getElementById('response').textContent = result;
       }
     };
+    document.getElementById('ask-button').addEventListener('click', (event) => {
+      event.preventDefault();
+      askChatbot(document.getElementById('prompt').value);
+    });
+    document.getElementById('ask-button-strict').addEventListener('click', (event) => {
+      event.preventDefault();
+      askChatbot(document.getElementById('prompt').value, true);
+    });
 
-    a();
+    const uploadFile = async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:3000/chatbot/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json();
+      console.log(result);
+    };
+
+    document.getElementById('upload-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const fileInput = document.getElementById('upload-file');
+      const file = fileInput.files[0];
+      if (file) {
+        uploadFile(file);
+      }
+    });
   </script>
 </html>

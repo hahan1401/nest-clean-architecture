@@ -1,7 +1,31 @@
 import { CHATBOT_PATTERNS, CHATBOT_SERVICE } from '@app/common';
-import { Controller, HttpException, Inject, MessageEvent, Query, Sse } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  HttpException,
+  Inject,
+  MessageEvent,
+  Post,
+  Query,
+  Sse,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { Observable, catchError, map, throwError } from 'rxjs';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Observable, catchError, firstValueFrom, map, throwError } from 'rxjs';
+
+type UploadDocumentBody = {
+  fileName?: string;
+  chunkSize?: number | string;
+  chunkOverlap?: number | string;
+};
+
+type UploadedTextFile = {
+  buffer: Buffer;
+  originalname: string;
+};
 
 @Controller()
 export class ChatbotController {
@@ -29,5 +53,57 @@ export class ChatbotController {
         );
       }),
     );
+  }
+
+  @Post('chatbot/documents/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadDocument(
+    @UploadedFile() file: UploadedTextFile,
+    @Body() body: UploadDocumentBody,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('file is required');
+    }
+
+    const content = file.buffer.toString('utf-8').trim();
+
+    if (!content) {
+      throw new BadRequestException('Uploaded file is empty');
+    }
+
+    const fileName = (body.fileName || file.originalname || '').trim();
+
+    if (!fileName) {
+      throw new BadRequestException('fileName is required');
+    }
+
+    const chunkSize = this.parseOptionalNumber(body.chunkSize, 'chunkSize');
+    const chunkOverlap = this.parseOptionalNumber(body.chunkOverlap, 'chunkOverlap');
+
+    const payload = {
+      fileName,
+      content,
+      ...(chunkSize ? { chunkSize } : {}),
+      ...(chunkOverlap !== undefined ? { chunkOverlap } : {}),
+    };
+    try {
+      return await firstValueFrom(this.chatbotService.send(CHATBOT_PATTERNS.UPSERT_DOCUMENT, payload));
+    } catch (err: any) {
+      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
+    }
+  }
+
+  private parseOptionalNumber(value: number | string | undefined, fieldName: string): number | undefined {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+
+    const parsed = Number(value);
+
+    if (!Number.isFinite(parsed)) {
+      throw new BadRequestException(`${fieldName} must be a valid number`);
+    }
+
+    return parsed;
   }
 }

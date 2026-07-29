@@ -14,9 +14,9 @@ import { ChatbotModule } from './presentation/modules/chatbot.module';
         join(process.cwd(), 'apps/api-chatbot/.env.local'),
       ],
     }),
-    LoggerModule.forRoot({
-      pinoHttp: createPinoHttpConfig('API-CHATBOT'),
-    }),
+    // LoggerModule.forRoot({
+    //   pinoHttp: createPinoHttpConfig('API-CHATBOT'),
+    // }),
     ChatbotModule,
   ],
 })
