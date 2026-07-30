@@ -29,7 +29,7 @@ export class GeminiAIService extends ChatBotServicePort {
   private readonly DEFAULT_CHUNK_SIZE = 1000;
   private readonly DEFAULT_CHUNK_OVERLAP = 100;
   private readonly DEFAULT_MATCH_COUNT = 5;
-  private readonly DEFAULT_MAX_DISTANCE = 1;
+  private readonly DEFAULT_MAX_DISTANCE = 0.5;
   private readonly FALLBACK_MESSAGE = 'I cannot find this information in internal documents.';
   private readonly logger = new Logger(GeminiAIService.name);
 
@@ -130,24 +130,26 @@ export class GeminiAIService extends ChatBotServicePort {
   private async embedChunk(chunk: string): Promise<number[]> {
     const embeddingModel = 'gemini-embedding-2';
 
-    const response = await this.ai.models.embedContent({
-      model: embeddingModel,
-      contents: chunk,
-    });
+    try {
+      const response = await this.ai.models.embedContent({
+        model: embeddingModel,
+        contents: { text: chunk },
+        config: {
+          outputDimensionality: 1536,
+        },
+      });
 
-    if (!response.sdkHttpResponse?.headers?.ok) {
-      throw new Error(
-        `Gemini AI embed request failed with status ${response.sdkHttpResponse?.headers?.status}`,
-      );
+      const embedding = response?.embeddings?.[0]?.values ?? [];
+
+      if (!embedding || !Array.isArray(embedding) || !embedding.length) {
+        throw new Error('Invalid embedding response from Gemini AI');
+      }
+
+      return embedding;
+    } catch (error) {
+      this.logger.error('Error generating embedding:', error);
+      throw new Error('Failed to generate embedding for the chunk');
     }
-
-    const embedding = response?.embeddings?.[0]?.values;
-
-    if (!embedding || !Array.isArray(embedding) || !embedding.length) {
-      throw new Error('Invalid embedding response from Gemini AI');
-    }
-
-    return embedding;
   }
 
   private async insertChunks(
@@ -185,25 +187,29 @@ export class GeminiAIService extends ChatBotServicePort {
 
     const vectorLiteral = this.toVectorLiteral(questionEmbedding);
 
-    return this.prismaService.$queryRawUnsafe<RetrievedChunkRow[]>(
-      `
-      SELECT
-        dc."id" AS "chunk_id",
-        dc."content" AS "chunk_content",
-        dc."chunk_index" AS "chunk_index",
-        d."file_name" AS "file_name",
-        (dc."embedding" <=> $1::vector) AS "similarity"
-      FROM "document_chunks" dc
-      INNER JOIN "documents" d
-        ON d."id" = dc."document_id"
-      WHERE (dc."embedding" <=> $1::vector) <= $2
-      ORDER BY dc."embedding" <=> $1::vector ASC
-      LIMIT $3
-    `,
-      vectorLiteral,
-      maxDistance,
-      matchCount,
-    );
+    try {
+      const result = await this.prismaService.$queryRawUnsafe<RetrievedChunkRow[]>(
+        `
+        SELECT
+          dc."id" AS "chunk_id",
+          dc."content" AS "chunk_content",
+          dc."chunk_index" AS "chunk_index",
+          (dc."embedding" <=> $1::vector) AS "similarity"
+        FROM "document_chunks" dc
+        WHERE (dc."embedding" <=> $1::vector) <= $2
+        ORDER BY dc."embedding" <=> $1::vector ASC
+        LIMIT $3
+        `,
+        vectorLiteral,
+        maxDistance,
+        matchCount,
+      );
+
+      return result;
+    } catch (e) {
+      this.logger.error('MATCH QUERY ERROR:', e);
+      throw e;
+    }
   }
 
   private async buildGroundedPrompt(question: string): Promise<string | null> {
@@ -221,7 +227,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
     const context = matches
       .map((match, index) => {
-        return `[Chunk ${index + 1}] Source: ${match.file_name}  ${match.chunk_content}`;
+        return `[Chunk ${index + 1}] Source: ${match.chunk_content}`;
       })
       .join('\n\n');
 
@@ -284,7 +290,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
       return () => {
         isCancelled = true;
-        console.log('Observable unsubscribed');
+        this.logger.log('Observable unsubscribed');
       };
     });
   }
@@ -296,7 +302,6 @@ export class GeminiAIService extends ChatBotServicePort {
 
           try {
             groundedPrompt = await this.buildGroundedPrompt(prompt);
-            this.logger.log(`Grounded Prompt: ${groundedPrompt}`);
           } catch (error) {
             this.logger.error('Failed to build grounded prompt', error);
             throw error;
