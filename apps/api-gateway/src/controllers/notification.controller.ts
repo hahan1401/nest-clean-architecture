@@ -1,6 +1,7 @@
 import type { CorrelatedRequest } from '@app/common';
 import {
   BroadcastNotificationDto,
+  NOTIFICATION_BROADCAST_SERVICE,
   NOTIFICATION_PATTERNS,
   NOTIFICATION_SERVICE,
   SendNotificationDto,
@@ -11,7 +12,10 @@ import { lastValueFrom } from 'rxjs';
 
 @Controller('notifications')
 export class NotificationController {
-  constructor(@Inject(NOTIFICATION_SERVICE) private readonly notificationClient: ClientProxy) {}
+  constructor(
+    @Inject(NOTIFICATION_SERVICE) private readonly notificationClient: ClientProxy,
+    @Inject(NOTIFICATION_BROADCAST_SERVICE) private readonly broadcastClient: ClientProxy,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED)
@@ -29,7 +33,7 @@ export class NotificationController {
   @HttpCode(HttpStatus.ACCEPTED)
   async broadcast(@Req() req: CorrelatedRequest, @Body() dto: BroadcastNotificationDto) {
     await lastValueFrom(
-      this.notificationClient.emit(NOTIFICATION_PATTERNS.BROADCAST, {
+      this.broadcastClient.emit(NOTIFICATION_PATTERNS.BROADCAST, {
         ...dto,
         requestId: req.requestId,
       }),

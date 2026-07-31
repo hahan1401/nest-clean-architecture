@@ -1,5 +1,11 @@
 import { CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
-import { NOTIFICATION_QUEUE, NOTIFICATION_SERVICE, RABBITMQ_DEFAULT_URL } from '@app/common';
+import {
+  NOTIFICATION_BROADCAST_EXCHANGE,
+  NOTIFICATION_BROADCAST_SERVICE,
+  NOTIFICATION_EXCHANGE,
+  NOTIFICATION_SERVICE,
+  RABBITMQ_DEFAULT_URL,
+} from '@app/common';
 import { AllExceptionsHttpFilter, createPinoHttpConfig, LoggingInterceptor } from '@app/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
@@ -61,8 +67,18 @@ import { NotificationController } from './controllers/notification.controller';
         transport: Transport.RMQ,
         options: {
           urls: [process.env.RABBITMQ_URL || RABBITMQ_DEFAULT_URL],
-          queue: process.env.NOTIFICATION_QUEUE || NOTIFICATION_QUEUE,
-          queueOptions: { durable: true },
+          exchange: NOTIFICATION_EXCHANGE,
+          exchangeType: 'topic',
+          wildcards: true,
+        },
+      },
+      {
+        name: NOTIFICATION_BROADCAST_SERVICE,
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RABBITMQ_URL || RABBITMQ_DEFAULT_URL],
+          exchange: NOTIFICATION_BROADCAST_EXCHANGE,
+          exchangeType: 'fanout',
         },
       },
     ]),

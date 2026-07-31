@@ -290,13 +290,19 @@ anywhere, including during bootstrap.
 
 ### Notification Service (`api-notification`)
 
-Events are published on the durable RabbitMQ queue `notifications_queue` (fire-and-forget,
-manual ack) and fanned out over the Socket.IO namespace `/notifications`.
+Two RabbitMQ topologies feed the same Socket.IO namespace `/notifications`:
 
-| Pattern | Payload | Description |
-|---------|---------|-------------|
-| `notification.send` | `{ userId, title, message, type?, data? }` | Emit to the `user:{userId}` room |
-| `notification.broadcast` | `{ title, message, type?, data? }` | Emit to every connected client |
+| Exchange | Type | Queue | Delivery |
+|----------|------|-------|----------|
+| `notifications.topic` | topic | `notifications_queue` (durable, shared) | Routing key = message pattern; replicas compete, each event handled once |
+| `notifications.fanout` | fanout | `notifications.broadcast.<uuid>` (exclusive, auto-delete, one per instance) | Every replica receives the event and pushes to its own sockets |
+
+Messages are consumed with manual acknowledgement; a payload that fails is nacked without requeue.
+
+| Pattern | Exchange | Payload | Description |
+|---------|----------|---------|-------------|
+| `notification.send` | topic | `{ userId, title, message, type?, data? }` | Emit to the `user:{userId}` room |
+| `notification.broadcast` | fanout | `{ title, message, type?, data? }` | Emit to every connected client |
 
 Clients connect with the user identity in the handshake and listen to the `notification` event:
 
