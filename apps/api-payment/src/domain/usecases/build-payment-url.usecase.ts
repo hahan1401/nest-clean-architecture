@@ -1,3 +1,5 @@
+import { PaymentRequest } from '../ports/vnpay.port';
+
 export interface BuildPaymentUrlUseCase {
-  execute(payload: any): Promise<string>;
+  execute(payload: PaymentRequest): Promise<string>;
 }

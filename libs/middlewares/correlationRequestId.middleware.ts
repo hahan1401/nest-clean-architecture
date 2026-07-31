@@ -1,17 +1,17 @@
+import { CorrelatedRequest } from '@app/common';
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { NextFunction, Request, Response } from 'express';
+import { NextFunction, Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class CorrelationRequestIdMiddleware implements NestMiddleware {
   constructor(private readonly logger: PinoLogger) {}
 
-  use(req: Request, res: Response, next: NextFunction) {
+  use(req: CorrelatedRequest, res: Response, next: NextFunction) {
     const incoming = req.headers['x-request-id'];
-    const requestId =
-      (Array.isArray(incoming) ? incoming[0] : incoming)?.trim() || randomUUID();
-    req['requestId'] = requestId;
+    const requestId = (Array.isArray(incoming) ? incoming[0] : incoming)?.trim() || randomUUID();
+    req.requestId = requestId;
     res.setHeader('x-request-id', requestId);
     this.logger.info({
       requestId,

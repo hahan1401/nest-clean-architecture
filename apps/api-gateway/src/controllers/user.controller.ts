@@ -16,8 +16,8 @@ import {
   Req,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import type { Request } from 'express';
 import { lastValueFrom } from 'rxjs';
+import type { CorrelatedRequest } from '@app/common';
 import {
   USER_SERVICE,
   USER_PATTERNS,
@@ -32,9 +32,9 @@ export class UserController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Req() req: Request, @Body() dto: CreateUserDto) {
+  create(@Req() req: CorrelatedRequest, @Body() dto: CreateUserDto) {
     return lastValueFrom(
-      this.userClient.send(USER_PATTERNS.CREATE_USER, { ...dto, requestId: req['requestId'] }),
+      this.userClient.send(USER_PATTERNS.CREATE_USER, { ...dto, requestId: req.requestId }),
     );
   }
 
@@ -49,12 +49,12 @@ export class UserController {
   }
 
   @Put(':id')
-  update(@Req() req: Request, @Param('id') id: string, @Body() updateData: UpdateUserDto) {
+  update(@Req() req: CorrelatedRequest, @Param('id') id: string, @Body() updateData: UpdateUserDto) {
     return lastValueFrom(
       this.userClient.send(USER_PATTERNS.UPDATE_USER, {
         id,
         updateData,
-        requestId: req['requestId'],
+        requestId: req.requestId,
       }),
     );
   }
@@ -66,20 +66,24 @@ export class UserController {
   }
 
   @Patch(':id/location')
-  updateLocation(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateLocationDto) {
+  updateLocation(
+    @Req() req: CorrelatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateLocationDto,
+  ) {
     return lastValueFrom(
       this.userClient.send(USER_PATTERNS.UPDATE_LOCATION, {
         id,
         latitude: dto.latitude,
         longitude: dto.longitude,
-        requestId: req['requestId'],
+        requestId: req.requestId,
       }),
     );
   }
 
   @Get(':id/nearby')
   findNearby(
-    @Req() req: Request,
+    @Req() req: CorrelatedRequest,
     @Param('id') id: string,
     @Query('radius', new DefaultValuePipe(10), ParseIntPipe) radius: number,
   ) {
@@ -87,7 +91,7 @@ export class UserController {
       this.userClient.send(USER_PATTERNS.FIND_NEARBY_USERS, {
         id,
         radius,
-        requestId: req['requestId'],
+        requestId: req.requestId,
       }),
     );
   }

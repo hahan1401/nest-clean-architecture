@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { VerifyIpnCall } from 'vnpay';
+import { ReturnQueryFromVNPay, VerifyIpnCall } from 'vnpay';
 import { VnPayPort } from '../../domain/ports/vnpay.port';
 import { VerifyIpnCallUseCase } from '../../domain/usecases/verify-ipn-call.usecase';
 
@@ -7,7 +7,7 @@ import { VerifyIpnCallUseCase } from '../../domain/usecases/verify-ipn-call.usec
 export class VerifyIpnCallService implements VerifyIpnCallUseCase {
   constructor(private readonly vnpayPort: VnPayPort) {}
 
-  async execute(query: any): Promise<VerifyIpnCall> {
+  async execute(query: ReturnQueryFromVNPay): Promise<VerifyIpnCall> {
     return this.vnpayPort.verifyIpnCall(query);
   }
 }

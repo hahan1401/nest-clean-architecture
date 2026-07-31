@@ -1,3 +1,5 @@
+import { Params } from "nestjs-pino";
+
 type PinoHttpRequest = {
   url?: string;
   method?: string;
@@ -8,7 +10,7 @@ type PinoHttpRequest = {
 
 const isPrettyLoggingEnabled = process.env.NODE_ENV !== 'production';
 
-export function createPinoHttpConfig(serviceName: string) {
+export function createPinoHttpConfig(serviceName: string): Params['pinoHttp'] {
   return {
     customProps: (req: PinoHttpRequest) => ({
       body: req.body,

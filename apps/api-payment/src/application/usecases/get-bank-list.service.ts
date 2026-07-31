@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Bank } from 'vnpay';
 import { VnPayPort } from '../../domain/ports/vnpay.port';
 import { GetBankListUseCase } from '../../domain/usecases/get-bank-list.usecase';
 
@@ -6,7 +7,7 @@ import { GetBankListUseCase } from '../../domain/usecases/get-bank-list.usecase'
 export class GetBankListService implements GetBankListUseCase {
   constructor(private readonly vnpayService: VnPayPort) {}
 
-  async execute(): Promise<any> {
+  async execute(): Promise<Bank[]> {
     return this.vnpayService.getBankLink();
   }
 }

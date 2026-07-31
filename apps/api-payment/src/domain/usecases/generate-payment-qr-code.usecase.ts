@@ -1,3 +1,6 @@
+import { GenerateQrResponse } from 'vnpay';
+import { PaymentRequest } from '../ports/vnpay.port';
+
 export interface GeneratePaymentQrCodeUseCase {
-  execute(payload: any): Promise<any>;
+  execute(payload: PaymentRequest): Promise<GenerateQrResponse>;
 }

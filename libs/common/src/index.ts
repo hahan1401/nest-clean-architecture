@@ -6,3 +6,4 @@ export * from './dtos/update-user.dto';
 export * from './dtos/update-location.dto';
 export * from './logger';
 export * from './errors';
+export * from './types/request';

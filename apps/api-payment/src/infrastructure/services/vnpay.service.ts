@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
-import { VnPayPort } from '../../domain/ports/vnpay.port';
+import { PaymentRequest, VnPayPort } from '../../domain/ports/vnpay.port';
 import { VnpayService } from 'nestjs-vnpay';
 import {
   Bank,
   BuildPaymentUrl,
   dateFormat,
+  GenerateQrResponse,
   ProductCode,
   ReturnQueryFromVNPay,
   VerifyIpnCall,
@@ -14,6 +15,14 @@ import {
   VnpCurrCode,
   VnpLocale,
 } from 'vnpay';
+
+/** vnpay's BuildPaymentUrl omits the billing/version fields that VNPay still accepts. */
+type VnpayPaymentPayload = BuildPaymentUrl & {
+  vnp_Version?: string;
+  vnp_Command?: string;
+  vnp_Bill_Mobile?: string;
+  vnp_Bill_Email?: string;
+};
 
 @Injectable()
 export class MyVnpayService extends VnPayPort {
@@ -29,7 +38,7 @@ export class MyVnpayService extends VnPayPort {
     return this.vnpayService.getBankList();
   }
 
-  private buildPaymentPayload(payload: any): BuildPaymentUrl {
+  private buildPaymentPayload(payload: PaymentRequest): VnpayPaymentPayload {
     const amount = Number(payload?.amount ?? 10);
     const vnpAmount = Number.isFinite(amount) ? Math.round(amount * 100) : 10000 * 100;
     const orderInfo =
@@ -63,10 +72,10 @@ export class MyVnpayService extends VnPayPort {
       ...(payload?.bankCode ? { vnp_BankCode: payload.bankCode } : {}),
       ...(payload?.billingMobile ? { vnp_Bill_Mobile: payload.billingMobile } : {}),
       ...(payload?.billingEmail ? { vnp_Bill_Email: payload.billingEmail } : {}),
-    } as BuildPaymentUrl;
+    };
   }
 
-  async generatePaymentQrCode(payload: any): Promise<any> {
+  async generatePaymentQrCode(payload: PaymentRequest): Promise<GenerateQrResponse> {
     const payloadData = this.buildPaymentPayload(payload);
 
     this.logger.debug({ payloadData }, 'vnpay payload data');
@@ -74,15 +83,15 @@ export class MyVnpayService extends VnPayPort {
     return this.vnpayService.generateQr(payloadData);
   }
 
-  async buildPaymentUrl(payload: any): Promise<string> {
+  async buildPaymentUrl(payload: PaymentRequest): Promise<string> {
     return this.vnpayService.buildPaymentUrl(this.buildPaymentPayload(payload));
   }
 
-  async verifyReturnUrl(query: any): Promise<VerifyReturnUrl> {
-    return this.vnpayService.verifyReturnUrl(query as ReturnQueryFromVNPay);
+  async verifyReturnUrl(query: ReturnQueryFromVNPay): Promise<VerifyReturnUrl> {
+    return this.vnpayService.verifyReturnUrl(query);
   }
 
-  async verifyIpnCall(query: any): Promise<VerifyIpnCall> {
-    return this.vnpayService.verifyIpnCall(query as ReturnQueryFromVNPay);
+  async verifyIpnCall(query: ReturnQueryFromVNPay): Promise<VerifyIpnCall> {
+    return this.vnpayService.verifyIpnCall(query);
   }
 }

@@ -1,4 +1,4 @@
-import { CHATBOT_PATTERNS, CHATBOT_SERVICE } from '@app/common';
+import { CHATBOT_PATTERNS, CHATBOT_SERVICE, normalizeError } from '@app/common';
 import {
   BadRequestException,
   Body,
@@ -15,6 +15,8 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Observable, catchError, firstValueFrom, map, throwError } from 'rxjs';
+
+type AnswerChunk = { data?: string };
 
 type UploadDocumentBody = {
   fileName?: string;
@@ -33,24 +35,22 @@ export class ChatbotController {
 
   @Sse('chatbot/sse')
   handleRequest(@Query('prompt') prompt: string): Observable<MessageEvent> {
-    return this.chatbotService.send(CHATBOT_PATTERNS.ASK_SSE, { prompt }).pipe(
-      map((chunk: any) => ({ data: chunk?.data ?? '' }) as MessageEvent),
-      catchError((err: any) => {
-        return throwError(
-          () => new HttpException(err?.message ?? 'Internal error', err?.status ?? 500),
-        );
+    return this.chatbotService.send<AnswerChunk>(CHATBOT_PATTERNS.ASK_SSE, { prompt }).pipe(
+      map((chunk): MessageEvent => ({ data: chunk?.data ?? '' })),
+      catchError((err: unknown) => {
+        const { status, message } = normalizeError(err);
+        return throwError(() => new HttpException(message, status));
       }),
     );
   }
 
   @Sse('chatbot/strict-sse')
   handleStrictRequest(@Query('prompt') prompt: string): Observable<MessageEvent> {
-    return this.chatbotService.send(CHATBOT_PATTERNS.ASK_STRICT_SSE, { prompt }).pipe(
-      map((chunk: any) => ({ data: chunk?.data ?? '' }) as MessageEvent),
-      catchError((err: any) => {
-        return throwError(
-          () => new HttpException(err?.message ?? 'Internal error', err?.status ?? 500),
-        );
+    return this.chatbotService.send<AnswerChunk>(CHATBOT_PATTERNS.ASK_STRICT_SSE, { prompt }).pipe(
+      map((chunk): MessageEvent => ({ data: chunk?.data ?? '' })),
+      catchError((err: unknown) => {
+        const { status, message } = normalizeError(err);
+        return throwError(() => new HttpException(message, status));
       }),
     );
   }

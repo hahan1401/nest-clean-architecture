@@ -1,5 +1,5 @@
-import { VerifyIpnCall } from 'vnpay';
+import { ReturnQueryFromVNPay, VerifyIpnCall } from 'vnpay';
 
 export interface VerifyIpnCallUseCase {
-  execute(query: any): Promise<VerifyIpnCall>;
+  execute(query: ReturnQueryFromVNPay): Promise<VerifyIpnCall>;
 }

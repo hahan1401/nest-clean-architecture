@@ -28,7 +28,7 @@ export class PaymentController {
   }
 
   @Get('/ipn')
-  ipn(@Query() query: any) {
+  ipn(@Query() query: Record<string, string>) {
     return query;
   }
 }

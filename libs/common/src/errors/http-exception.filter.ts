@@ -1,6 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, Injectable } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import { PinoLogger } from 'nestjs-pino';
+import { CorrelatedRequest } from '../types/request';
 import { normalizeError } from './normalize';
 
 /**
@@ -17,7 +18,7 @@ export class AllExceptionsHttpFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request & { requestId?: string }>();
+    const request = ctx.getRequest<CorrelatedRequest>();
     const { code, status, message } = normalizeError(exception);
     const requestId = request.requestId;
 

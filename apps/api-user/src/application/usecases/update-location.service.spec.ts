@@ -1,4 +1,6 @@
 import { NotFoundError } from '@app/common';
+import { User } from '@app/database';
+import { NominatimResponse } from 'libs/types/api-location/common';
 import { GeocodingClientPort } from '../../domain/ports/geocoding-client.port';
 import { UserRepository } from '../../domain/repositories/user.repository';
 import { UpdateLocationService } from './update-location.service';
@@ -25,12 +27,13 @@ describe('UpdateLocationService', () => {
   });
 
   it('builds the location name from the geocoding result', async () => {
-    userRepository.findById.mockResolvedValue({ id: 'u1' } as any);
+    const user = new User({ id: 'u1' });
+    userRepository.findById.mockResolvedValue(user);
     geocodingClient.reverseGeocode.mockResolvedValue({
-      addresstype: 'city',
+      addresstype: 'amenity',
       address: { suburb: 'Ward 1', city: 'Hanoi', country: 'Vietnam' },
-    } as any);
-    userRepository.updateLocation.mockResolvedValue({ id: 'u1' } as any);
+    } as NominatimResponse);
+    userRepository.updateLocation.mockResolvedValue(user);
 
     await service.execute('u1', 21, 105);
 
@@ -43,9 +46,10 @@ describe('UpdateLocationService', () => {
   });
 
   it('falls back to null location name when geocoding fails', async () => {
-    userRepository.findById.mockResolvedValue({ id: 'u1' } as any);
+    const user = new User({ id: 'u1' });
+    userRepository.findById.mockResolvedValue(user);
     geocodingClient.reverseGeocode.mockResolvedValue(null);
-    userRepository.updateLocation.mockResolvedValue({ id: 'u1' } as any);
+    userRepository.updateLocation.mockResolvedValue(user);
 
     await service.execute('u1', 21, 105);
 

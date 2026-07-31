@@ -478,7 +478,7 @@ export class GeminiAIService extends ChatBotServicePort {
             input.fileName,
           );
           documentId = inserted[0]?.id;
-        } catch (error: any) {
+        } catch (error) {
           this.logger.error({ err: error, fileName: input.fileName }, 'Error inserting document');
           throw new DependencyError(`Failed to insert document`, error);
         }
