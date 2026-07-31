@@ -22,7 +22,7 @@ async function bootstrap() {
   app.useLogger(app.get(Logger));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
-  console.log(
+  app.get(Logger).log(
     `Location service is running on port ${process.env.LOCATION_SERVICE_PORT || '3002'}`,
     'Bootstrap',
   );

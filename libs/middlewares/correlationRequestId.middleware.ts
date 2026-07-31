@@ -8,9 +8,13 @@ export class CorrelationRequestIdMiddleware implements NestMiddleware {
   constructor(private readonly logger: PinoLogger) {}
 
   use(req: Request, res: Response, next: NextFunction) {
-    req['requestId'] = randomUUID();
+    const incoming = req.headers['x-request-id'];
+    const requestId =
+      (Array.isArray(incoming) ? incoming[0] : incoming)?.trim() || randomUUID();
+    req['requestId'] = requestId;
+    res.setHeader('x-request-id', requestId);
     this.logger.info({
-      requestId: req['requestId'],
+      requestId,
       method: req.method,
     });
     next();

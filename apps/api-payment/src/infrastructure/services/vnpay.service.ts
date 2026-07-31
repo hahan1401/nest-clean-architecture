@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
 import { VnPayPort } from '../../domain/ports/vnpay.port';
 import { VnpayService } from 'nestjs-vnpay';
 import {
@@ -19,6 +20,7 @@ export class MyVnpayService extends VnPayPort {
   constructor(
     private readonly configService: ConfigService,
     @Inject(VnpayService) private readonly vnpayService: VnpayService,
+    private readonly logger: PinoLogger,
   ) {
     super();
   }
@@ -67,7 +69,7 @@ export class MyVnpayService extends VnPayPort {
   async generatePaymentQrCode(payload: any): Promise<any> {
     const payloadData = this.buildPaymentPayload(payload);
 
-    console.log('vnpay payload data: ', payloadData);
+    this.logger.debug({ payloadData }, 'vnpay payload data');
 
     return this.vnpayService.generateQr(payloadData);
   }
