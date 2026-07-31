@@ -41,8 +41,10 @@ nest-clean-architecture/
 │   └── api-chatbot/   # Chatbot + document ingestion service (TCP)
 │
 ├── libs/
-│   ├── common/        # Shared constants, DTOs, logger config
-│   └── database/      # PrismaService + DatabaseModule + entities
+│   ├── common/        # Shared constants, DTOs, error model, filters, logger config
+│   ├── database/      # PrismaService + DatabaseModule + entities
+│   ├── middlewares/   # Correlation request id middleware
+│   └── types/         # Shared cross-service types
 │
 ├── prisma/
 │   ├── schema.prisma
@@ -107,6 +109,7 @@ Dependencies point inward only.
 - Defines business contracts and use case interfaces.
 - No framework decorators.
 - No infra or transport coupling.
+- Signals failures with `DomainError` subclasses from `@app/common`, never with `HttpException`/`RpcException`.
 
 Typical folders:
 - `domain/repositories` (when persistence abstractions are needed, eg `api-user`)
@@ -118,17 +121,61 @@ Typical folders:
 - Implements use cases with `execute(...)` methods.
 - Orchestrates domain contracts and ports.
 - Contains service-level workflow logic.
+- Throws `DomainError` subclasses; contains no `try/catch` used purely to remap errors.
 
 ### 3) Infrastructure Layer (`infrastructure/`)
 
 - Provides concrete implementations of domain contracts.
 - Uses Prisma (`@app/database`) and external integrations (Nominatim, VNPay, Gemini).
+- Wraps third-party failures in `DependencyError` so callers stay transport-agnostic.
 
 ### 4) Presentation Layer (`presentation/`)
 
 - Handles transport concerns (`@MessagePattern` in microservices, HTTP in gateway).
 - Maps transport payloads to use case calls.
-- Converts errors to transport-specific exceptions.
+- Contains no error-handling code: global exception filters perform transport translation.
+
+---
+
+## Error Handling
+
+Errors are modelled once in the domain and translated exactly once at the transport boundary.
+
+```
+Domain/Application            Boundary (filters)             Caller
+─────────────────────────────────────────────────────────────────────
+throw NotFoundError    ->   AllExceptionsRpcFilter    ->   RpcException
+                                                            { code, status,
+                                                              message, requestId }
+                                ↓ (forwarded over TCP)
+                           AllExceptionsHttpFilter    ->   HTTP 404 JSON body
+```
+
+`@app/common` provides:
+
+| Error | `ErrorCode` | HTTP status |
+|-------|-------------|-------------|
+| `ValidationError` | `VALIDATION` | 400 |
+| `UnauthorizedError` | `UNAUTHORIZED` | 401 |
+| `ForbiddenError` | `FORBIDDEN` | 403 |
+| `NotFoundError` | `NOT_FOUND` | 404 |
+| `ConflictError` | `CONFLICT` | 409 |
+| `DependencyError` | `DEPENDENCY_FAILURE` | 502 |
+| _(anything else)_ | `INTERNAL` | 500 |
+
+- `AllExceptionsRpcFilter` (microservices) converts any thrown value into a stable
+  `{ code, status, message, requestId }` envelope carried by `RpcException`.
+- `AllExceptionsHttpFilter` (gateway) unwraps that envelope — or any local error — into
+  `{ statusCode, code, message, requestId, timestamp, path }`.
+- `normalizeError()` is the single translation point and understands `DomainError`,
+  `RpcException`, `HttpException` and serialized envelopes forwarded across TCP.
+- Both filters are registered globally via `APP_FILTER` in every app module.
+
+Rules of thumb:
+
+- Never import `@nestjs/common` exceptions in `domain/` or `application/`.
+- Only catch an error if you add context or a fallback; otherwise let it bubble to the filter.
+- Unexpected errors are logged with a stack trace but returned to clients as a generic 500.
 
 ---
 
@@ -144,6 +191,7 @@ Key behaviors:
 
 - Applies global `ValidationPipe` (`whitelist + transform`).
 - Uses `CorrelationRequestIdMiddleware` for request correlation.
+- Registers `AllExceptionsHttpFilter` and `LoggingInterceptor` globally.
 - Routes HTTP requests to microservices through `ClientProxy.send(...)`.
 - Exposes SSE endpoints for chatbot streaming.
 
@@ -158,7 +206,9 @@ Exports:
 - Service tokens: `USER_SERVICE`, `GEOCODING_SERVICE`, `PAYMENT_SERVICE`, `CHATBOT_SERVICE`
 - Message pattern groups: `USER_PATTERNS`, `GEOCODING_PATTERNS`, `PAYMENT_PATTERNS`, `CHATBOT_PATTERNS`
 - DTOs used by gateway and user service (`CreateUserDto`, `UpdateUserDto`, `UpdateLocationDto`, response DTOs)
-- Shared pino logger config (`createPinoHttpConfig`)
+- Error model: `DomainError` hierarchy, `ErrorCode`, `normalizeError`
+- Boundary filters: `AllExceptionsHttpFilter`, `AllExceptionsRpcFilter`
+- Shared pino logger config (`createPinoHttpConfig`) and `LoggingInterceptor`
 
 ### `@app/database`
 
@@ -170,9 +220,30 @@ Exports:
 
 ### Logging Strategy
 
-- All apps use `nestjs-pino`.
-- Service label is set per app (`API-GATEWAY`, `API-USER`, `API-LOCATION`, `API-PAYMENT`, `API-CHATBOT`).
-- Request correlation is added in gateway middleware and can be propagated downstream.
+`nestjs-pino` is the only logging implementation — the NestJS built-in `Logger` is not used
+anywhere, including during bootstrap.
+
+- Every app registers `LoggerModule.forRoot({ pinoHttp: createPinoHttpConfig('<SERVICE>') })`;
+  the service label is set per app (`API-GATEWAY`, `API-USER`, `API-LOCATION`, `API-PAYMENT`,
+  `API-CHATBOT`).
+- Bootstrap uses `bufferLogs: true` + `app.flushLogs()` so Nest's own startup output is
+  replayed through pino instead of the default console logger.
+- Classes inject `PinoLogger` and call `setContext(...)`; log calls use pino's
+  `(mergingObject, message)` signature so fields stay structured.
+- `LoggingInterceptor` is registered globally (`APP_INTERCEPTOR`) in every app and records
+  request start / completed / failed together with the duration, for both HTTP and RPC.
+- Sensitive fields (`password`, `authorization`, `vnp_HashSecret`) are redacted by the shared
+  pino config.
+
+### Request Correlation
+
+- `CorrelationRequestIdMiddleware` honours an inbound `x-request-id` header and falls back to a
+  generated UUID, then echoes it back on the response.
+- The gateway forwards `requestId` on object-shaped TCP payloads; the microservice
+  `ValidationPipe` (`whitelist`) strips it before it reaches handlers, while the interceptor
+  still logs it.
+- Filters attach `requestId` to every error response, so a failure can be traced from the HTTP
+  edge down to the service that raised it.
 
 ---
 
@@ -294,6 +365,9 @@ npm run build:user
 npm run build:location
 npm run build:payment
 npm run build:chatbot
+
+# Unit tests (specs are co-located as *.spec.ts under apps/)
+npm test
 
 # Start PostgreSQL
 docker compose up -d
