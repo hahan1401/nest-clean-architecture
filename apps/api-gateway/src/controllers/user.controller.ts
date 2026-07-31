@@ -12,11 +12,11 @@ import {
   ParseIntPipe,
   HttpCode,
   HttpStatus,
-  HttpException,
   Inject,
   Req,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import type { Request } from 'express';
 import { lastValueFrom } from 'rxjs';
 import {
   USER_SERVICE,
@@ -32,69 +32,63 @@ export class UserController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreateUserDto) {
-    return lastValueFrom(this.userClient.send(USER_PATTERNS.CREATE_USER, dto)).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+  create(@Req() req: Request, @Body() dto: CreateUserDto) {
+    return lastValueFrom(
+      this.userClient.send(USER_PATTERNS.CREATE_USER, { ...dto, requestId: req['requestId'] }),
+    );
   }
 
   @Get()
-  async findAll() {
-    return lastValueFrom(this.userClient.send(USER_PATTERNS.GET_USERS, {})).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+  findAll() {
+    return lastValueFrom(this.userClient.send(USER_PATTERNS.GET_USERS, {}));
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return lastValueFrom(this.userClient.send(USER_PATTERNS.GET_USER_BY_ID, id)).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+  findOne(@Param('id') id: string) {
+    return lastValueFrom(this.userClient.send(USER_PATTERNS.GET_USER_BY_ID, id));
   }
 
   @Put(':id')
-  async update(@Req() req: Request, @Param('id') id: string, @Body() updateData: UpdateUserDto) {
+  update(@Req() req: Request, @Param('id') id: string, @Body() updateData: UpdateUserDto) {
     return lastValueFrom(
       this.userClient.send(USER_PATTERNS.UPDATE_USER, {
         id,
         updateData,
         requestId: req['requestId'],
       }),
-    ).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+    );
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id') id: string) {
-    return lastValueFrom(this.userClient.send(USER_PATTERNS.DELETE_USER, id)).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+  remove(@Param('id') id: string) {
+    return lastValueFrom(this.userClient.send(USER_PATTERNS.DELETE_USER, id));
   }
 
   @Patch(':id/location')
-  async updateLocation(@Param('id') id: string, @Body() dto: UpdateLocationDto) {
+  updateLocation(@Req() req: Request, @Param('id') id: string, @Body() dto: UpdateLocationDto) {
     return lastValueFrom(
       this.userClient.send(USER_PATTERNS.UPDATE_LOCATION, {
         id,
         latitude: dto.latitude,
         longitude: dto.longitude,
+        requestId: req['requestId'],
       }),
-    ).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+    );
   }
 
   @Get(':id/nearby')
-  async findNearby(
+  findNearby(
+    @Req() req: Request,
     @Param('id') id: string,
     @Query('radius', new DefaultValuePipe(10), ParseIntPipe) radius: number,
   ) {
     return lastValueFrom(
-      this.userClient.send(USER_PATTERNS.FIND_NEARBY_USERS, { id, radius }),
-    ).catch((err) => {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    });
+      this.userClient.send(USER_PATTERNS.FIND_NEARBY_USERS, {
+        id,
+        radius,
+        requestId: req['requestId'],
+      }),
+    );
   }
 }

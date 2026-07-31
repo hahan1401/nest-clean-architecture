@@ -1,5 +1,6 @@
 import { User } from '@app/database';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { NotFoundError } from '@app/common';
 import { UserRepository } from '../../domain/repositories/user.repository';
 import { UpdateUserUseCase } from '../../domain/usecases/update-user.usecase';
 
@@ -10,7 +11,7 @@ export class UpdateUserService implements UpdateUserUseCase {
   async execute(id: string, data: Partial<User>): Promise<User> {
     const user = await this.userRepository.update(id, data);
     if (!user) {
-      throw new NotFoundException(`User with id ${id} not found`);
+      throw new NotFoundError(`User with id ${id} not found`);
     }
     return user;
   }

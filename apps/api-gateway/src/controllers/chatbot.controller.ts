@@ -86,11 +86,7 @@ export class ChatbotController {
       ...(chunkSize ? { chunkSize } : {}),
       ...(chunkOverlap !== undefined ? { chunkOverlap } : {}),
     };
-    try {
-      return await firstValueFrom(this.chatbotService.send(CHATBOT_PATTERNS.UPSERT_DOCUMENT, payload));
-    } catch (err: any) {
-      throw new HttpException(err?.message ?? 'Internal error', err?.status ?? 500);
-    }
+    return firstValueFrom(this.chatbotService.send(CHATBOT_PATTERNS.UPSERT_DOCUMENT, payload));
   }
 
   private parseOptionalNumber(value: number | string | undefined, fieldName: string): number | undefined {

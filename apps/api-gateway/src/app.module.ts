@@ -1,6 +1,7 @@
 import { CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
-import { createPinoHttpConfig } from '@app/common';
+import { AllExceptionsHttpFilter, createPinoHttpConfig, LoggingInterceptor } from '@app/common';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CorrelationRequestIdMiddleware } from 'libs/middlewares/correlationRequestId.middleware';
@@ -54,6 +55,10 @@ import { ChatbotController } from './controllers/chatbot.controller';
     ]),
   ],
   controllers: [UserController, PaymentController, ChatbotController],
+  providers: [
+    { provide: APP_FILTER, useClass: AllExceptionsHttpFilter },
+    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

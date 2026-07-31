@@ -1,5 +1,6 @@
 import { User } from '@app/database';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { NotFoundError } from '@app/common';
 import { GeocodingClientPort } from '../../domain/ports/geocoding-client.port';
 import { UserRepository } from '../../domain/repositories/user.repository';
 import { UpdateLocationUseCase } from '../../domain/usecases/update-location.usecase';
@@ -14,7 +15,7 @@ export class UpdateLocationService implements UpdateLocationUseCase {
   async execute(userId: string, latitude: number, longitude: number): Promise<User> {
     const user = await this.userRepository.findById(userId);
     if (!user) {
-      throw new NotFoundException(`User with id ${userId} not found`);
+      throw new NotFoundError(`User with id ${userId} not found`);
     }
     const reverseGeocodeResponse = await this.geocodingClient.reverseGeocode(
       latitude,

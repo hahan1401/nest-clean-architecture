@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundError } from '@app/common';
 import { GeocodingClientPort } from '../../domain/ports/geocoding-client.port';
 import { UserRepository } from '../../domain/repositories/user.repository';
 import { UpdateLocationService } from './update-location.service';
@@ -20,7 +20,7 @@ describe('UpdateLocationService', () => {
   it('throws when the user does not exist', async () => {
     userRepository.findById.mockResolvedValue(null);
 
-    await expect(service.execute('missing', 1, 2)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.execute('missing', 1, 2)).rejects.toBeInstanceOf(NotFoundError);
     expect(geocodingClient.reverseGeocode).not.toHaveBeenCalled();
   });
 

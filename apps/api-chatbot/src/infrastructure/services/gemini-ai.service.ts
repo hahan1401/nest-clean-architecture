@@ -10,6 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@app/database';
+import { DependencyError, NotFoundError, ValidationError } from '@app/common';
 
 type DocumentRow = {
   id: string;
@@ -43,7 +44,7 @@ export class GeminiAIService extends ChatBotServicePort {
   private get ai() {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not set in the environment variables.');
+      throw new DependencyError('GEMINI_API_KEY is not set in the environment variables.');
     }
     return new GoogleGenAI({ apiKey });
   }
@@ -74,11 +75,11 @@ export class GeminiAIService extends ChatBotServicePort {
 
   private validateContentInput(fileName: string, content: string) {
     if (!fileName?.trim()) {
-      throw new Error('fileName is required');
+      throw new ValidationError('fileName is required');
     }
 
     if (!content?.trim()) {
-      throw new Error('content is required');
+      throw new ValidationError('content is required');
     }
   }
 
@@ -88,11 +89,11 @@ export class GeminiAIService extends ChatBotServicePort {
     overlap = this.DEFAULT_CHUNK_OVERLAP,
   ): string[] {
     if (size <= 0) {
-      throw new Error('chunkSize must be greater than 0');
+      throw new ValidationError('chunkSize must be greater than 0');
     }
 
     if (overlap < 0 || overlap >= size) {
-      throw new Error('chunkOverlap must be between 0 and chunkSize - 1');
+      throw new ValidationError('chunkOverlap must be between 0 and chunkSize - 1');
     }
 
     const normalized = text.trim();
@@ -142,13 +143,13 @@ export class GeminiAIService extends ChatBotServicePort {
       const embedding = response?.embeddings?.[0]?.values ?? [];
 
       if (!embedding || !Array.isArray(embedding) || !embedding.length) {
-        throw new Error('Invalid embedding response from Gemini AI');
+        throw new DependencyError('Invalid embedding response from Gemini AI');
       }
 
       return embedding;
     } catch (error) {
       this.logger.error('Error generating embedding:', error);
-      throw new Error('Failed to generate embedding for the chunk');
+      throw new DependencyError('Failed to generate embedding for the chunk', error);
     }
   }
 
@@ -175,7 +176,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
   private toVectorLiteral(values: number[]): string {
     if (!values.length || values.some((value) => !Number.isFinite(value))) {
-      throw new Error('Embedding vector contains invalid values');
+      throw new DependencyError('Embedding vector contains invalid values');
     }
 
     return `[${values.join(',')}]`;
@@ -358,7 +359,7 @@ export class GeminiAIService extends ChatBotServicePort {
   }
   async deleteDocument(id: string): Promise<{ documentId: string; deleted: true }> {
     if (!id?.trim()) {
-      throw new Error('Document id is required');
+      throw new ValidationError('Document id is required');
     }
 
     const deleted = await this.prismaService.$queryRawUnsafe<Array<{ id: string }>>(
@@ -367,7 +368,7 @@ export class GeminiAIService extends ChatBotServicePort {
     );
 
     if (!deleted[0]?.id) {
-      throw new Error('Document not found');
+      throw new NotFoundError('Document not found');
     }
 
     return {
@@ -378,11 +379,11 @@ export class GeminiAIService extends ChatBotServicePort {
 
   async updateDocument(input: UpdateDocumentInput): Promise<DocumentMutationResult> {
     if (!input.id?.trim()) {
-      throw new Error('Document id is required');
+      throw new ValidationError('Document id is required');
     }
 
     if (!input.fileName && input.content === undefined) {
-      throw new Error('Nothing to update. Provide fileName or content');
+      throw new ValidationError('Nothing to update. Provide fileName or content');
     }
 
     return this.prismaService.$transaction(async (tx) => {
@@ -394,7 +395,7 @@ export class GeminiAIService extends ChatBotServicePort {
       const existing = rows[0];
 
       if (!existing) {
-        throw new Error('Document not found');
+        throw new NotFoundError('Document not found');
       }
 
       const nextFileName = input.fileName?.trim() || existing.file_name;
@@ -423,7 +424,7 @@ export class GeminiAIService extends ChatBotServicePort {
       const chunks = this.splitIntoChunks(input.content, input.chunkSize, input.chunkOverlap);
 
       if (!chunks.length) {
-        throw new Error('Document content is empty after chunking');
+        throw new ValidationError('Document content is empty after chunking');
       }
 
       const embeddings = await this.createEmbeddings(chunks);
@@ -453,7 +454,7 @@ export class GeminiAIService extends ChatBotServicePort {
     const chunks = this.splitIntoChunks(input.content, input.chunkSize, input.chunkOverlap);
 
     if (!chunks.length) {
-      throw new Error('Document content is empty after chunking');
+      throw new ValidationError('Document content is empty after chunking');
     }
 
     const embeddings = await this.createEmbeddings(chunks);
@@ -477,7 +478,7 @@ export class GeminiAIService extends ChatBotServicePort {
           documentId = inserted[0]?.id;
         } catch (error: any) {
           this.logger.error(`Error inserting document "${input.fileName}":`, error);
-          throw new Error(`Failed to insert document`);
+          throw new DependencyError(`Failed to insert document`, error);
         }
       } else {
         await tx.$executeRawUnsafe(
@@ -487,7 +488,7 @@ export class GeminiAIService extends ChatBotServicePort {
       }
 
       if (!documentId) {
-        throw new Error('Failed to create or locate document');
+        throw new DependencyError('Failed to create or locate document');
       }
 
       await tx.$executeRawUnsafe(
