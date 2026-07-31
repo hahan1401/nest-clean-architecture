@@ -26,3 +26,9 @@ export const CHATBOT_PATTERNS = {
   UPDATE_DOCUMENT: 'update-document',
   DELETE_DOCUMENT: 'delete-document',
 } as const;
+
+/** RabbitMQ event patterns consumed by api-notification. */
+export const NOTIFICATION_PATTERNS = {
+  SEND: 'notification.send',
+  BROADCAST: 'notification.broadcast',
+} as const;

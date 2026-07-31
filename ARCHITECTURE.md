@@ -38,7 +38,8 @@ nest-clean-architecture/
 │   ├── api-user/      # User service (TCP)
 │   ├── api-location/  # Geocoding service (TCP)
 │   ├── api-payment/   # Payment service (TCP, VNPay integration)
-│   └── api-chatbot/   # Chatbot + document ingestion service (TCP)
+│   ├── api-chatbot/   # Chatbot + document ingestion service (TCP)
+│   └── api-notification/ # Real-time notifications (RabbitMQ consumer + Socket.IO)
 │
 ├── libs/
 │   ├── common/        # Shared constants, DTOs, error model, filters, logger config
@@ -68,6 +69,7 @@ nest-clean-architecture/
 | `api-location` | 3002 | TCP | Reverse geocoding service |
 | `api-payment` | 3003 | TCP | VNPay operations: bank list, QR, payment URL, return verification |
 | `api-chatbot` | 3004 | TCP | Streaming chatbot responses and document upsert/update/delete |
+| `api-notification` | 3005 | RabbitMQ + Socket.IO | Consumes notification events and pushes them to connected clients |
 
 ---
 
@@ -286,6 +288,23 @@ anywhere, including during bootstrap.
 | `update-document` | `{ id, ... }` | Update document metadata/content |
 | `delete-document` | `{ id }` | Delete document |
 
+### Notification Service (`api-notification`)
+
+Events are published on the durable RabbitMQ queue `notifications_queue` (fire-and-forget,
+manual ack) and fanned out over the Socket.IO namespace `/notifications`.
+
+| Pattern | Payload | Description |
+|---------|---------|-------------|
+| `notification.send` | `{ userId, title, message, type?, data? }` | Emit to the `user:{userId}` room |
+| `notification.broadcast` | `{ title, message, type?, data? }` | Emit to every connected client |
+
+Clients connect with the user identity in the handshake and listen to the `notification` event:
+
+```js
+const socket = io('http://localhost:3005/notifications', { auth: { userId: 'u1' } });
+socket.on('notification', (n) => console.log(n));
+```
+
 ---
 
 ## HTTP Endpoints (Gateway)
@@ -318,6 +337,13 @@ anywhere, including during bootstrap.
 |--------|------|---------------|
 | `GET` | `/chatbot/sse?prompt=...` | `ask-sse` |
 | `GET` | `/chatbot/strict-sse?prompt=...` | `ask-strict-sse` |
+
+### Notification Endpoints
+
+| Method | Path | Proxy Pattern |
+|--------|------|---------------|
+| `POST` | `/notifications` | `notification.send` (RabbitMQ event) |
+| `POST` | `/notifications/broadcast` | `notification.broadcast` (RabbitMQ event) |
 
 ---
 
@@ -386,6 +412,9 @@ docker compose up -d
 | `PAYMENT_SERVICE_PORT` | `3003` | api-gateway, api-payment |
 | `CHATBOT_SERVICE_HOST` | `localhost` | api-gateway |
 | `CHATBOT_SERVICE_PORT` | `3004` | api-gateway, api-chatbot |
+| `NOTIFICATION_SERVICE_PORT` | `3005` | api-notification |
+| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672` | api-gateway, api-notification |
+| `NOTIFICATION_QUEUE` | `notifications_queue` | api-gateway, api-notification |
 | `LOCATION_SERVICE_PORT` | `3002` | api-user, api-location |
 | `HOST_NAME` | (required in current user->location client config) | api-user |
 | `DATABASE_URL` | - | services using `@app/database` |

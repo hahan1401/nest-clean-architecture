@@ -53,6 +53,15 @@
         "tsConfigPath": "apps/api-chatbot/tsconfig.app.json"
       }
     },
+    "api-notification": {
+      "type": "application",
+      "root": "apps/api-notification",
+      "entryFile": "main",
+      "sourceRoot": "apps/api-notification/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api-notification/tsconfig.app.json"
+      }
+    },
     "common": {
       "type": "library",
       "root": "libs/common",
