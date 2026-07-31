@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ChatBotServicePort } from '../../domain/ports/chatbot-service.port';
 import { ApiGenerateService } from '../../application/usecases/api-generate.service';
-import { ChatBotService } from '../../infrastructure/services/chatbot-service';
 import { ConfigModule } from '@nestjs/config';
 import { ChatbotController } from '../controllers/chatbot.controller';
 import { DatabaseModule } from '@app/database';
@@ -15,8 +14,7 @@ import { GeminiAIService } from '../../infrastructure/services/gemini-ai.service
   imports: [HttpModule, ConfigModule, DatabaseModule],
   controllers: [ChatbotController],
   providers: [
-    { provide: ChatBotServicePort, useClass: ChatBotService },
-    { provide: GeminiAIService, useClass: GeminiAIService },
+    { provide: ChatBotServicePort, useClass: GeminiAIService },
     ApiGenerateService,
     UpsertDocumentService,
     UpdateDocumentService,

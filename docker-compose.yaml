@@ -12,18 +12,9 @@ services:
     networks:
       - network
     restart: always
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama
-  #   ports:
-  #     - '11434:11434'
-  #   volumes:
-  #     - ollama-data:/root/.ollama
-  #   restart: unless-stopped
 
 volumes:
   nest-clean-architecture-db:
-  # ollama-data:
 networks:
   network:
     driver: bridge

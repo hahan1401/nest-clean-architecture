@@ -356,25 +356,94 @@ export class GeminiAIService extends ChatBotServicePort {
       };
     });
   }
-  deleteDocument(id: string): Promise<{ documentId: string; deleted: true }> {
-    return new Promise((resolve) => {
-      // Simulate an asynchronous operation (e.g., database deletion)
-      setTimeout(() => {
-        resolve({ documentId: id, deleted: true });
-      }, 1000); // Simulate a 1-second delay
-    });
+  async deleteDocument(id: string): Promise<{ documentId: string; deleted: true }> {
+    if (!id?.trim()) {
+      throw new Error('Document id is required');
+    }
+
+    const deleted = await this.prismaService.$queryRawUnsafe<Array<{ id: string }>>(
+      'DELETE FROM "documents" WHERE "id" = $1 RETURNING "id"',
+      id,
+    );
+
+    if (!deleted[0]?.id) {
+      throw new Error('Document not found');
+    }
+
+    return {
+      documentId: deleted[0].id,
+      deleted: true,
+    };
   }
-  updateDocument(input: UpdateDocumentInput): Promise<DocumentMutationResult> {
-    return new Promise((resolve) => {
-      // Simulate an asynchronous operation (e.g., database update)
-      setTimeout(() => {
-        const result: DocumentMutationResult = {
+
+  async updateDocument(input: UpdateDocumentInput): Promise<DocumentMutationResult> {
+    if (!input.id?.trim()) {
+      throw new Error('Document id is required');
+    }
+
+    if (!input.fileName && input.content === undefined) {
+      throw new Error('Nothing to update. Provide fileName or content');
+    }
+
+    return this.prismaService.$transaction(async (tx) => {
+      const rows = await tx.$queryRawUnsafe<DocumentRow[]>(
+        'SELECT "id", "file_name" FROM "documents" WHERE "id" = $1 LIMIT 1',
+        input.id,
+      );
+
+      const existing = rows[0];
+
+      if (!existing) {
+        throw new Error('Document not found');
+      }
+
+      const nextFileName = input.fileName?.trim() || existing.file_name;
+
+      if (input.content === undefined) {
+        await tx.$executeRawUnsafe(
+          'UPDATE "documents" SET "file_name" = $1, "updated_at" = NOW() WHERE "id" = $2',
+          nextFileName,
+          input.id,
+        );
+
+        const chunkCountRows = await tx.$queryRawUnsafe<Array<{ count: bigint | number }>>(
+          'SELECT COUNT(*)::bigint AS "count" FROM "document_chunks" WHERE "document_id" = $1',
+          input.id,
+        );
+
+        return {
           documentId: input.id,
-          chunkCount: 1, // Simulated chunk count
-          fileName: input.fileName || 'updated-file-name', // Simulated file name
+          fileName: nextFileName,
+          chunkCount: Number(chunkCountRows[0]?.count ?? 0),
         };
-        resolve(result);
-      }, 1000); // Simulate a 1-second delay
+      }
+
+      this.validateContentInput(nextFileName, input.content);
+
+      const chunks = this.splitIntoChunks(input.content, input.chunkSize, input.chunkOverlap);
+
+      if (!chunks.length) {
+        throw new Error('Document content is empty after chunking');
+      }
+
+      const embeddings = await this.createEmbeddings(chunks);
+
+      await tx.$executeRawUnsafe(
+        'UPDATE "documents" SET "file_name" = $1, "updated_at" = NOW() WHERE "id" = $2',
+        nextFileName,
+        input.id,
+      );
+      await tx.$executeRawUnsafe(
+        'DELETE FROM "document_chunks" WHERE "document_id" = $1',
+        input.id,
+      );
+      await this.insertChunks(tx, input.id, chunks, embeddings);
+
+      return {
+        documentId: input.id,
+        fileName: nextFileName,
+        chunkCount: chunks.length,
+      };
     });
   }
 

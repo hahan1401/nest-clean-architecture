@@ -5,6 +5,8 @@ import { DatabaseModule } from '@app/database';
 import { GEOCODING_SERVICE } from '@app/common';
 import { UserRepository } from '../../domain/repositories/user.repository';
 import { PrismaUserRepository } from '../../infrastructure/repositories/prisma-user.repository';
+import { GeocodingClientPort } from '../../domain/ports/geocoding-client.port';
+import { GeocodingClientService } from '../../infrastructure/services/geocoding-client.service';
 import { CreateUserService } from '../../application/usecases/create-user.service';
 import { GetUsersService } from '../../application/usecases/get-users.service';
 import { GetUserByIdService } from '../../application/usecases/get-user-by-id.service';
@@ -36,6 +38,7 @@ import { ConfigService } from '@nestjs/config';
   controllers: [UserController],
   providers: [
     { provide: UserRepository, useClass: PrismaUserRepository },
+    { provide: GeocodingClientPort, useClass: GeocodingClientService },
     CreateUserService,
     GetUsersService,
     GetUserByIdService,

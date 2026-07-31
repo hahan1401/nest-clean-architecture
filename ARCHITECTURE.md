@@ -122,7 +122,7 @@ Typical folders:
 ### 3) Infrastructure Layer (`infrastructure/`)
 
 - Provides concrete implementations of domain contracts.
-- Uses Prisma (`@app/database`) and external integrations (Nominatim, VNPay, Ollama).
+- Uses Prisma (`@app/database`) and external integrations (Nominatim, VNPay, Gemini).
 
 ### 4) Presentation Layer (`presentation/`)
 
@@ -315,7 +315,7 @@ docker compose up -d
 | `LOCATION_SERVICE_PORT` | `3002` | api-user, api-location |
 | `HOST_NAME` | (required in current user->location client config) | api-user |
 | `DATABASE_URL` | - | services using `@app/database` |
-| `OLLAMA_API_URL` | - | api-chatbot |
+| `GEMINI_API_KEY` | - | api-chatbot |
 | `vnp_HashSecret` / `vnp_TmnCode` | - | api-payment |
 | `VNPAY_RETURN_URL` / `VNPAY_IP_ADDR` | optional | api-payment |
 
