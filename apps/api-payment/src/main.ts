@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 
 config({ path: resolve(process.cwd(), '.env.local'), override: true });
@@ -16,6 +17,7 @@ async function bootstrap() {
     },
   });
   app.useLogger(app.get(Logger));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
   console.log(
     `Payment service is running on port ${process.env.PAYMENT_SERVICE_PORT || '3003'}`,

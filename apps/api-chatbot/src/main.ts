@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
 import { Logger } from 'nestjs-pino';
 
 config({
@@ -18,7 +19,8 @@ async function bootstrap() {
       port: parseInt(process.env.CHATBOT_SERVICE_PORT || '3004'),
     },
   });
-  // app.useLogger(app.get(Logger));
+  app.useLogger(app.get(Logger));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
   console.log(
     `Chatbot service is running on port ${process.env.CHATBOT_SERVICE_PORT || '3004'}`,
