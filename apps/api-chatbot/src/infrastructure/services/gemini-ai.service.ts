@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 import { Observable } from 'rxjs';
 import {
   ChatBotServicePort,
@@ -32,13 +33,14 @@ export class GeminiAIService extends ChatBotServicePort {
   private readonly DEFAULT_MATCH_COUNT = 5;
   private readonly DEFAULT_MAX_DISTANCE = 0.5;
   private readonly FALLBACK_MESSAGE = 'I cannot find this information in internal documents.';
-  private readonly logger = new Logger(GeminiAIService.name);
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prismaService: PrismaService,
+    private readonly logger: PinoLogger,
   ) {
     super();
+    logger.setContext(GeminiAIService.name);
   }
 
   private get ai() {
@@ -148,7 +150,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
       return embedding;
     } catch (error) {
-      this.logger.error('Error generating embedding:', error);
+      this.logger.error({ err: error }, 'Error generating embedding');
       throw new DependencyError('Failed to generate embedding for the chunk', error);
     }
   }
@@ -208,7 +210,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
       return result;
     } catch (e) {
-      this.logger.error('MATCH QUERY ERROR:', e);
+      this.logger.error({ err: e }, 'Chunk match query failed');
       throw e;
     }
   }
@@ -291,7 +293,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
       return () => {
         isCancelled = true;
-        this.logger.log('Observable unsubscribed');
+        this.logger.debug('Observable unsubscribed');
       };
     });
   }
@@ -304,7 +306,7 @@ export class GeminiAIService extends ChatBotServicePort {
           try {
             groundedPrompt = await this.buildGroundedPrompt(prompt);
           } catch (error) {
-            this.logger.error('Failed to build grounded prompt', error);
+            this.logger.error({ err: error }, 'Failed to build grounded prompt');
             throw error;
           }
 
@@ -335,11 +337,11 @@ export class GeminiAIService extends ChatBotServicePort {
 
             observer.complete();
           } catch (error) {
-            this.logger.error('Failed while streaming AI response', error);
+            this.logger.error({ err: error }, 'Failed while streaming AI response');
             throw error;
           }
         } catch (error) {
-          this.logger.error('apiStrictlyGenerateSSe error', error);
+          this.logger.error({ err: error }, 'apiStrictlyGenerateSSe failed');
 
           observer.next({
             data: this.FALLBACK_MESSAGE,
@@ -353,7 +355,7 @@ export class GeminiAIService extends ChatBotServicePort {
       })();
 
       return () => {
-        this.logger.log('Observable unsubscribed');
+        this.logger.debug('Observable unsubscribed');
       };
     });
   }
@@ -477,7 +479,7 @@ export class GeminiAIService extends ChatBotServicePort {
           );
           documentId = inserted[0]?.id;
         } catch (error: any) {
-          this.logger.error(`Error inserting document "${input.fileName}":`, error);
+          this.logger.error({ err: error, fileName: input.fileName }, 'Error inserting document');
           throw new DependencyError(`Failed to insert document`, error);
         }
       } else {

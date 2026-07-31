@@ -1,14 +1,18 @@
-import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { PinoLogger } from 'nestjs-pino';
 import { normalizeError } from './normalize';
 
 /**
  * Global filter for the HTTP gateway: maps any thrown value (including error
  * envelopes forwarded from TCP microservices) into a consistent JSON body.
  */
+@Injectable()
 @Catch()
 export class AllExceptionsHttpFilter implements ExceptionFilter {
-  private readonly logger = new Logger('HttpExceptionFilter');
+  constructor(private readonly logger: PinoLogger) {
+    logger.setContext('HttpExceptionFilter');
+  }
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();

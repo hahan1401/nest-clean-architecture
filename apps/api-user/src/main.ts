@@ -15,8 +15,10 @@ async function bootstrap() {
       host: '0.0.0.0',
       port: parseInt(process.env.USER_SERVICE_PORT || '3001'),
     },
+    bufferLogs: true,
   });
   app.useLogger(app.get(Logger));
+  app.flushLogs();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
   app.get(Logger).log(

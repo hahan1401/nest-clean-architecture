@@ -8,9 +8,10 @@ import { AppModule } from './app.module';
 config({ path: resolve(process.cwd(), '.env.local'), override: true });
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {});
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const logger = app.get(Logger);
   app.useLogger(logger);
+  app.flushLogs();
   app.enableCors();
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
