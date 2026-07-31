@@ -27,6 +27,16 @@ export function createPinoHttpConfig(serviceName: string) {
       },
       res: () => undefined,
     },
+    redact: {
+      paths: [
+        'req.body.password',
+        'body.password',
+        'req.headers.authorization',
+        'vnp_HashSecret',
+        '*.vnp_HashSecret',
+      ],
+      censor: '[REDACTED]',
+    },
     level: process.env.LOG_LEVEL ?? 'info',
     transport: isPrettyLoggingEnabled
       ? {

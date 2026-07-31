@@ -5,3 +5,4 @@ export * from './dtos/create-user.dto';
 export * from './dtos/update-user.dto';
 export * from './dtos/update-location.dto';
 export * from './logger';
+export * from './errors';
