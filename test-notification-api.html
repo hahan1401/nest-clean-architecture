@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification API Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 12px 24px;
+            margin: 10px 5px 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #1976D2;
+        }
+        button.success {
+            background-color: #4CAF50;
+        }
+        button.success:hover {
+            background-color: #45a049;
+        }
+        #response {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            min-height: 50px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            display: none;
+        }
+        #response.error {
+            background-color: #ffebee;
+            border-color: #f44336;
+        }
+        .endpoint {
+            color: #1976D2;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="test-section">
+            <h3>Test Notification to user1 and user2</h3>
+            <label for="message">Message:</label>
+            <input 
+                type="text" 
+                id="message" 
+                placeholder="Enter your test message" 
+                value="Hello from RabbitMQ! 🎉"
+            >
+            <button onclick="sendTestNotification()" class="success">
+                Broadcast
+        </div>
+
+        <div class="test-section">
+            <h3>Send to Specific User</h3>
+            <label for="userId">User ID:</label>
+            <input 
+                type="text" 
+                id="userId" 
+                placeholder="e.g., user1, user2, user123" 
+                value="user1"
+            >
+            <label for="specificMessage">Message:</label>
+            <input 
+                type="text" 
+                id="specificMessage" 
+                placeholder="Enter message for specific user" 
+                value="Direct message!"
+            >
+            <button onclick="sendSpecificNotification()">
+                📤 Send to Specific User
+            </button>
+        </div>
+
+        <div id="response"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/notifications';
+
+        function showResponse(data, isError = false) {
+            const responseDiv = document.getElementById('response');
+            responseDiv.style.display = 'block';
+            responseDiv.className = isError ? 'error' : '';
+            responseDiv.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function sendTestNotification() {
+            const message = document.getElementById('message').value;
+            const title = document.getElementById('message').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}/broadcast`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ title, message })
+                });
+
+                const data = await response.json();
+                showResponse(data);
+                
+                if (response.ok) {
+                    console.log('✅ Notifications sent successfully:', data);
+                } else {
+                    console.error('❌ Error:', data);
+                }
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+                console.error('❌ Request failed:', error);
+            }
+        }
+
+        async function sendSpecificNotification() {
+            const userId = document.getElementById('userId').value;
+            const message = document.getElementById('specificMessage').value;
+            const title = document.getElementById('specificMessage').value;
+            
+            try {
+                const response = await fetch(`${API_BASE}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId, title, message })
+                });
+
+                const data = await response.json();
+                showResponse(data);
+                
+                if (response.ok) {
+                    console.log('✅ Notification sent successfully:', data);
+                } else {
+                    console.error('❌ Error:', data);
+                }
+            } catch (error) {
+                showResponse({ error: error.message }, true);
+                console.error('❌ Request failed:', error);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.getElementById('message').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendTestNotification();
+            }
+        });
+
+        document.getElementById('specificMessage').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendSpecificNotification();
+            }
+        });
+    </script>
+</body>
+</html>
