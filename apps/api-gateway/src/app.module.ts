@@ -1,5 +1,7 @@
 import { CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
 import {
+  EMAIL_EXCHANGE,
+  EMAIL_SERVICE,
   NOTIFICATION_BROADCAST_EXCHANGE,
   NOTIFICATION_BROADCAST_SERVICE,
   NOTIFICATION_EXCHANGE,
@@ -18,6 +20,7 @@ import { PaymentController } from './controllers/payment.controller';
 import { UserController } from './controllers/user.controller';
 import { ChatbotController } from './controllers/chatbot.controller';
 import { NotificationController } from './controllers/notification.controller';
+import { EmailController } from './controllers/email.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -63,6 +66,18 @@ import { NotificationController } from './controllers/notification.controller';
     ]),
     ClientsModule.register([
       {
+        name: EMAIL_SERVICE,
+        transport: Transport.RMQ,
+        options: {
+          urls: [process.env.RABBITMQ_URL || RABBITMQ_DEFAULT_URL],
+          exchange: EMAIL_EXCHANGE,
+          exchangeType: 'topic',
+          wildcards: true,
+        },
+      },
+    ]),
+    ClientsModule.register([
+      {
         name: NOTIFICATION_SERVICE,
         transport: Transport.RMQ,
         options: {
@@ -83,7 +98,13 @@ import { NotificationController } from './controllers/notification.controller';
       },
     ]),
   ],
-  controllers: [UserController, PaymentController, ChatbotController, NotificationController],
+  controllers: [
+    UserController,
+    PaymentController,
+    ChatbotController,
+    NotificationController,
+    EmailController,
+  ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsHttpFilter },
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },

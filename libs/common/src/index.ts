@@ -6,6 +6,7 @@ export * from './dtos/create-user.dto';
 export * from './dtos/update-user.dto';
 export * from './dtos/update-location.dto';
 export * from './dtos/notification.dto';
+export * from './dtos/email.dto';
 export * from './logger';
 export * from './errors';
 export * from './types/request';

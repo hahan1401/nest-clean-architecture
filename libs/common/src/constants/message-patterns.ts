@@ -32,3 +32,8 @@ export const NOTIFICATION_PATTERNS = {
   SEND: 'notification.send',
   BROADCAST: 'notification.broadcast',
 } as const;
+
+/** RabbitMQ event patterns consumed by api-email. */
+export const EMAIL_PATTERNS = {
+  SEND: 'email.send',
+} as const;

@@ -15,6 +15,7 @@
     "payment:dev": "nest start api-payment --watch",
     "chatbot:dev": "nest start api-chatbot --watch",
     "notification:dev": "nest start api-notification --watch",
+    "email:dev": "nest start api-email --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/apps/nest-clean-architecture/main",
     "build:gateway": "nest build api-gateway",
@@ -23,6 +24,7 @@
     "build:payment": "nest build api-payment",
     "build:chatbot": "nest build api-chatbot",
     "build:notification": "nest build api-notification",
+    "build:email": "nest build api-email",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -31,6 +33,7 @@
     "test:e2e": "jest --config ./apps/nest-clean-architecture/test/jest-e2e.json"
   },
   "dependencies": {
+    "@aws-sdk/client-ses": "^3.1021.0",
     "@golevelup/nestjs-rabbitmq": "^9.0.2",
     "@google/genai": "^2.13.0",
     "@nestjs/axios": "^4.0.1",

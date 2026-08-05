@@ -7,4 +7,8 @@ export const NOTIFICATION_EXCHANGE = 'notifications.topic';
 export const NOTIFICATION_BROADCAST_EXCHANGE = 'notifications.fanout';
 export const NOTIFICATION_BROADCAST_QUEUE_PREFIX = 'notifications.broadcast';
 
+/** Email jobs: routing key is the message pattern. */
+export const EMAIL_EXCHANGE = 'emails.topic';
+export const EMAIL_QUEUE = 'emails_queue';
+
 export const RABBITMQ_DEFAULT_URL = 'amqp://guest:guest@localhost:5672';
