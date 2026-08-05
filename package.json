@@ -31,6 +31,7 @@
     "test:e2e": "jest --config ./apps/nest-clean-architecture/test/jest-e2e.json"
   },
   "dependencies": {
+    "@golevelup/nestjs-rabbitmq": "^9.0.2",
     "@google/genai": "^2.13.0",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",

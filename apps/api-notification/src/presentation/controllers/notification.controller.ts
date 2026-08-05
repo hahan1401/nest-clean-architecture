@@ -1,14 +1,17 @@
-import { BroadcastNotificationDto, NOTIFICATION_PATTERNS, SendNotificationDto } from '@app/common';
+import {
+  BroadcastNotificationDto,
+  NOTIFICATION_BROADCAST_EXCHANGE,
+  NOTIFICATION_BROADCAST_QUEUE_PREFIX,
+  NOTIFICATION_EXCHANGE,
+  NOTIFICATION_PATTERNS,
+  NOTIFICATION_QUEUE,
+  SendNotificationDto,
+} from '@app/common';
+import { RabbitPayload, RabbitSubscribe } from '@golevelup/nestjs-rabbitmq';
 import { Controller, Inject } from '@nestjs/common';
-import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import { randomUUID } from 'node:crypto';
 import { BroadcastNotificationService } from '../../application/usecases/broadcast-notification.service';
 import { SendNotificationService } from '../../application/usecases/send-notification.service';
-
-/** Minimal surface of the amqplib channel used for manual acknowledgement. */
-type RmqChannel = {
-  ack(message: unknown): void;
-  nack(message: unknown, allUpTo?: boolean, requeue?: boolean): void;
-};
 
 @Controller()
 export class NotificationController {
@@ -17,26 +20,24 @@ export class NotificationController {
   @Inject()
   private readonly broadcastNotificationService: BroadcastNotificationService;
 
-  @EventPattern(NOTIFICATION_PATTERNS.SEND)
-  send(@Payload() dto: SendNotificationDto, @Ctx() context: RmqContext) {
-    this.settle(context, () => this.sendNotificationService.execute(dto));
+  @RabbitSubscribe({
+    exchange: NOTIFICATION_EXCHANGE,
+    routingKey: NOTIFICATION_PATTERNS.SEND,
+    queue: process.env.NOTIFICATION_QUEUE || NOTIFICATION_QUEUE,
+    queueOptions: { durable: true },
+  })
+  send(@RabbitPayload() dto: SendNotificationDto) {
+    this.sendNotificationService.execute(dto);
   }
 
-  @EventPattern(NOTIFICATION_PATTERNS.BROADCAST)
-  broadcast(@Payload() dto: BroadcastNotificationDto, @Ctx() context: RmqContext) {
-    this.settle(context, () => this.broadcastNotificationService.execute(dto));
-  }
-
-  private settle(context: RmqContext, handle: () => void): void {
-    const channel = context.getChannelRef() as RmqChannel;
-    const message = context.getMessage();
-    try {
-      handle();
-      channel.ack(message);
-    } catch (error) {
-      // Drop instead of requeue: a poisoned payload would otherwise loop forever.
-      channel.nack(message, false, false);
-      throw error;
-    }
+  // Exclusive per-instance queue: each replica receives every broadcast.
+  @RabbitSubscribe({
+    exchange: NOTIFICATION_BROADCAST_EXCHANGE,
+    routingKey: '',
+    queue: `${NOTIFICATION_BROADCAST_QUEUE_PREFIX}.${randomUUID()}`,
+    queueOptions: { durable: false, autoDelete: true, exclusive: true },
+  })
+  broadcast(@RabbitPayload() dto: BroadcastNotificationDto) {
+    this.broadcastNotificationService.execute(dto);
   }
 }
