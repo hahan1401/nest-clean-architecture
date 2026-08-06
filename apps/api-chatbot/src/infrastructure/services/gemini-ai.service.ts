@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { Observable } from 'rxjs';
 import {
@@ -9,8 +9,11 @@ import {
   UpsertDocumentInput,
 } from '../../domain/ports/chatbot-service.port';
 import { ConfigService } from '@nestjs/config';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '@app/database';
+import {
+  PRISMA_SERVICE,
+  type ExtendedPrismaClient,
+  type ExtendedTransactionClient,
+} from '@app/database';
 import { DependencyError, NotFoundError, ValidationError } from '@app/common';
 
 type DocumentRow = {
@@ -36,7 +39,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly prismaService: PrismaService,
+    @Inject(PRISMA_SERVICE) private readonly prismaService: ExtendedPrismaClient,
     private readonly logger: PinoLogger,
   ) {
     super();
@@ -156,7 +159,7 @@ export class GeminiAIService extends ChatBotServicePort {
   }
 
   private async insertChunks(
-    tx: Prisma.TransactionClient,
+    tx: ExtendedTransactionClient,
     documentId: string,
     chunks: string[],
     embeddings: number[][],
@@ -191,7 +194,9 @@ export class GeminiAIService extends ChatBotServicePort {
     const vectorLiteral = this.toVectorLiteral(questionEmbedding);
 
     try {
-      const result = await this.prismaService.$queryRawUnsafe<RetrievedChunkRow[]>(
+      // Retrieval is read-only and lag-tolerant; $queryRawUnsafe is not auto-routed,
+      // so the replica has to be selected explicitly.
+      const result = await this.prismaService.$replica().$queryRawUnsafe<RetrievedChunkRow[]>(
         `
         SELECT
           dc."id" AS "chunk_id",
@@ -364,10 +369,14 @@ export class GeminiAIService extends ChatBotServicePort {
       throw new ValidationError('Document id is required');
     }
 
-    const deleted = await this.prismaService.$queryRawUnsafe<Array<{ id: string }>>(
-      'DELETE FROM "documents" WHERE "id" = $1 RETURNING "id"',
-      id,
-    );
+    // A write wearing a query's clothes: pinned to the primary so it cannot drift
+    // onto a replica if the extension's routing rules ever change.
+    const deleted = await this.prismaService
+      .$primary()
+      .$queryRawUnsafe<Array<{ id: string }>>(
+        'DELETE FROM "documents" WHERE "id" = $1 RETURNING "id"',
+        id,
+      );
 
     if (!deleted[0]?.id) {
       throw new NotFoundError('Document not found');

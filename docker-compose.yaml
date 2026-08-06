@@ -7,11 +7,45 @@ services:
       POSTGRES_HOST_AUTH_METHOD: 'trust'
     volumes:
       - nest-clean-architecture-db:/data/postgres
+      - ./docker/primary-init:/docker-entrypoint-initdb.d:ro
     ports:
       - 5432:5432
     networks:
       - network
     restart: always
+
+  # Streaming-replication standby. Clones the primary with pg_basebackup on first
+  # boot, then follows it read-only. Reachable on 5433 from the host.
+  nest-clean-architecture-db-replica:
+    image: pgvector/pgvector:pg17
+    container_name: nest-clean-architecture-db-replica
+    depends_on:
+      - nest-clean-architecture-db
+    environment:
+      PGDATA: /data/postgres
+    volumes:
+      - nest-clean-architecture-db-replica:/data
+    ports:
+      - 5433:5432
+    networks:
+      - network
+    restart: always
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        mkdir -p "$$PGDATA"
+        chown -R postgres:postgres /data
+        chmod 0700 "$$PGDATA"
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          echo "Standby empty; waiting for primary before base backup..."
+          until pg_isready -h nest-clean-architecture-db -U postgres -q; do sleep 1; done
+          # -R writes standby.signal + primary_conninfo, so the clone starts as a standby.
+          gosu postgres pg_basebackup -h nest-clean-architecture-db -U postgres \
+            -D "$$PGDATA" -Fp -Xs -R -P
+        fi
+        exec gosu postgres postgres
 
   nest-clean-architecture-rabbitmq:
     image: rabbitmq:4-management
@@ -30,6 +64,7 @@ services:
 
 volumes:
   nest-clean-architecture-db:
+  nest-clean-architecture-db-replica:
   nest-clean-architecture-rabbitmq:
 networks:
   network:
