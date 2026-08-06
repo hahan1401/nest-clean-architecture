@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { Observable } from 'rxjs';
 import {
@@ -26,7 +26,7 @@ type RetrievedChunkRow = {
 };
 
 @Injectable()
-export class GeminiAIService extends ChatBotServicePort implements OnModuleInit {
+export class GeminiAIService extends ChatBotServicePort {
   private readonly DEFAULT_CHUNK_SIZE = 1000;
   private readonly DEFAULT_CHUNK_OVERLAP = 100;
   private readonly DEFAULT_MATCH_COUNT = 5;
@@ -40,36 +40,6 @@ export class GeminiAIService extends ChatBotServicePort implements OnModuleInit 
   ) {
     super();
     logger.setContext(GeminiAIService.name);
-  }
-
-  /**
-   * The `documents` / `document_chunks` tables use the pgvector `vector` type,
-   * which TypeORM cannot model, so they are created idempotently here instead of
-   * via entity synchronization. Mirrors the former Prisma migrations.
-   */
-  async onModuleInit(): Promise<void> {
-    await this.dataSource.query('CREATE EXTENSION IF NOT EXISTS vector');
-    await this.dataSource.query(`
-      CREATE TABLE IF NOT EXISTS "documents" (
-        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        "file_name" text NOT NULL UNIQUE,
-        "created_at" timestamptz NOT NULL DEFAULT now(),
-        "updated_at" timestamptz NOT NULL DEFAULT now()
-      )
-    `);
-    await this.dataSource.query(`
-      CREATE TABLE IF NOT EXISTS "document_chunks" (
-        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        "document_id" uuid NOT NULL REFERENCES "documents"("id") ON DELETE CASCADE,
-        "chunk_index" integer NOT NULL,
-        "content" text NOT NULL,
-        "embedding" vector(1536),
-        "created_at" timestamptz NOT NULL DEFAULT now()
-      )
-    `);
-    await this.dataSource.query(
-      'CREATE INDEX IF NOT EXISTS "document_chunks_document_id_idx" ON "document_chunks" ("document_id")',
-    );
   }
 
   private get ai() {
