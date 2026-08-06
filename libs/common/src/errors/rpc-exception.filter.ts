@@ -17,7 +17,7 @@ export class AllExceptionsRpcFilter implements RpcExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): Observable<never> {
     const { code, status, message } = normalizeError(exception);
-    const data = host.switchToRpc().getData() as { requestId?: string } | undefined;
+    const data = host.switchToRpc().getData<{ requestId?: string } | undefined>();
     const requestId = data?.requestId;
 
     this.logger.error(

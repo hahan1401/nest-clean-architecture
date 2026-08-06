@@ -1,7 +1,4 @@
-import {
-  EMAIL_EXCHANGE,
-  RABBITMQ_DEFAULT_URL,
-} from '@app/common';
+import { EMAIL_EXCHANGE, RABBITMQ_DEFAULT_URL } from '@app/common';
 import { MessageHandlerErrorBehavior, RabbitMQModule } from '@golevelup/nestjs-rabbitmq';
 import { Module } from '@nestjs/common';
 import { SendEmailService } from '../../application/usecases/send-email.service';
@@ -16,8 +13,8 @@ import { EmailController } from '../controllers/email.controller';
       exchanges: [{ name: EMAIL_EXCHANGE, type: 'topic' }],
       defaultSubscribeErrorBehavior: MessageHandlerErrorBehavior.NACK,
       enableControllerDiscovery: true,
-      deserializer: (msg: Buffer) => {
-        const parsed = JSON.parse(msg.toString());
+      deserializer: (msg: Buffer): unknown => {
+        const parsed = JSON.parse(msg.toString()) as { data?: unknown } | null;
         return parsed?.data ?? parsed;
       },
     }),

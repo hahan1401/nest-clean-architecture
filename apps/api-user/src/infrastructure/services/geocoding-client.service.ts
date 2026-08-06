@@ -7,9 +7,7 @@ import { GeocodingClientPort } from '../../domain/ports/geocoding-client.port';
 
 @Injectable()
 export class GeocodingClientService extends GeocodingClientPort {
-  constructor(
-    @Inject(GEOCODING_SERVICE) private readonly geocodingClient: ClientProxy,
-  ) {
+  constructor(@Inject(GEOCODING_SERVICE) private readonly geocodingClient: ClientProxy) {
     super();
   }
 

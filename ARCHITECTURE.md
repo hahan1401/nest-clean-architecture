@@ -70,6 +70,7 @@ nest-clean-architecture/
 | `api-payment` | 3003 | TCP | VNPay operations: bank list, QR, payment URL, return verification |
 | `api-chatbot` | 3004 | TCP | Streaming chatbot responses and document upsert/update/delete |
 | `api-notification` | 3005 | RabbitMQ + Socket.IO | Consumes notification events and pushes them to connected clients |
+| `api-email` | — | RabbitMQ | Consumes email events and sends mail via AWS SES |
 
 ---
 

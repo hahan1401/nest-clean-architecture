@@ -14,4 +14,4 @@ async function bootstrap() {
 
   logger.log('Notification service is connected to RabbitMQ and ready', 'Bootstrap');
 }
-bootstrap();
+void bootstrap();

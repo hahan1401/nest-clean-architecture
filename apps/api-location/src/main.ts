@@ -24,9 +24,11 @@ async function bootstrap() {
   app.flushLogs();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
-  app.get(Logger).log(
-    `Location service is running on port ${process.env.LOCATION_SERVICE_PORT || '3002'}`,
-    'Bootstrap',
-  );
+  app
+    .get(Logger)
+    .log(
+      `Location service is running on port ${process.env.LOCATION_SERVICE_PORT || '3002'}`,
+      'Bootstrap',
+    );
 }
-bootstrap();
+void bootstrap();

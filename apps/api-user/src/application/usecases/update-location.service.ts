@@ -17,10 +17,7 @@ export class UpdateLocationService implements UpdateLocationUseCase {
     if (!user) {
       throw new NotFoundError(`User with id ${userId} not found`);
     }
-    const reverseGeocodeResponse = await this.geocodingClient.reverseGeocode(
-      latitude,
-      longitude,
-    );
+    const reverseGeocodeResponse = await this.geocodingClient.reverseGeocode(latitude, longitude);
 
     let locationNameArr: (string | undefined)[] = [];
     if (reverseGeocodeResponse?.addresstype === 'state_district') {

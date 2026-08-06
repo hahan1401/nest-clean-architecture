@@ -27,7 +27,7 @@ import { ConfigService } from '@nestjs/config';
         useFactory: (configService: ConfigService) => ({
           transport: Transport.TCP,
           options: {
-            host: configService.getOrThrow('HOST_NAME'),
+            host: configService.getOrThrow<string>('HOST_NAME'),
             port: configService.getOrThrow<number>('LOCATION_SERVICE_PORT'),
           },
         }),

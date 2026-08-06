@@ -83,8 +83,8 @@ export class MyVnpayService extends VnPayPort {
     return this.vnpayService.generateQr(payloadData);
   }
 
-  async buildPaymentUrl(payload: PaymentRequest): Promise<string> {
-    return this.vnpayService.buildPaymentUrl(this.buildPaymentPayload(payload));
+  buildPaymentUrl(payload: PaymentRequest): Promise<string> {
+    return Promise.resolve(this.vnpayService.buildPaymentUrl(this.buildPaymentPayload(payload)));
   }
 
   async verifyReturnUrl(query: ReturnQueryFromVNPay): Promise<VerifyReturnUrl> {

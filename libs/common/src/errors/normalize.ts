@@ -52,10 +52,15 @@ export function normalizeError(exception: unknown): NormalizedError {
       typeof response === 'string'
         ? response
         : ((response as Record<string, unknown>)?.message ?? exception.message);
+    const message = Array.isArray(raw)
+      ? raw.join(', ')
+      : typeof raw === 'string'
+        ? raw
+        : exception.message;
     return {
       code: codeFromStatus(status),
       status,
-      message: Array.isArray(raw) ? raw.join(', ') : String(raw),
+      message,
     };
   }
 

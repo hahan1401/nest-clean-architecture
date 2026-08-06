@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { GeocodingPort } from '../../domain/ports/geocoding.port';
 import { NominatimResponse } from 'libs/types/api-location/common';
 import { ConfigService } from '@nestjs/config';

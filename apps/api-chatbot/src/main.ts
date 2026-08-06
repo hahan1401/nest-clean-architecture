@@ -24,9 +24,11 @@ async function bootstrap() {
   app.flushLogs();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
-  app.get(Logger).log(
-    `Chatbot service is running on port ${process.env.CHATBOT_SERVICE_PORT || '3004'}`,
-    'Bootstrap',
-  );
+  app
+    .get(Logger)
+    .log(
+      `Chatbot service is running on port ${process.env.CHATBOT_SERVICE_PORT || '3004'}`,
+      'Bootstrap',
+    );
 }
-bootstrap();
+void bootstrap();

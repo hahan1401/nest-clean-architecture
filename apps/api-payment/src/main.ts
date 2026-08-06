@@ -21,9 +21,11 @@ async function bootstrap() {
   app.flushLogs();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
-  app.get(Logger).log(
-    `Payment service is running on port ${process.env.PAYMENT_SERVICE_PORT || '3003'}`,
-    'Bootstrap',
-  );
+  app
+    .get(Logger)
+    .log(
+      `Payment service is running on port ${process.env.PAYMENT_SERVICE_PORT || '3003'}`,
+      'Bootstrap',
+    );
 }
-bootstrap();
+void bootstrap();

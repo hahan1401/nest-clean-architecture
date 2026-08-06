@@ -32,4 +32,12 @@ export default tseslint.config(
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
+  {
+    // Referencing a jest mock method (e.g. `expect(repo.findById)`) is a false
+    // positive for unbound-method: the mock is not a real unbound instance method.
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
+    },
+  },
 );

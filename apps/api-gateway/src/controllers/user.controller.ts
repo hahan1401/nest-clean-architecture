@@ -49,7 +49,11 @@ export class UserController {
   }
 
   @Put(':id')
-  update(@Req() req: CorrelatedRequest, @Param('id') id: string, @Body() updateData: UpdateUserDto) {
+  update(
+    @Req() req: CorrelatedRequest,
+    @Param('id') id: string,
+    @Body() updateData: UpdateUserDto,
+  ) {
     return lastValueFrom(
       this.userClient.send(USER_PATTERNS.UPDATE_USER, {
         id,

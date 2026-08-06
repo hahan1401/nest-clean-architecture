@@ -57,10 +57,7 @@ export class ChatbotController {
 
   @Post('chatbot/documents/upload')
   @UseInterceptors(FileInterceptor('file'))
-  async uploadDocument(
-    @UploadedFile() file: UploadedTextFile,
-    @Body() body: UploadDocumentBody,
-  ) {
+  async uploadDocument(@UploadedFile() file: UploadedTextFile, @Body() body: UploadDocumentBody) {
     if (!file?.buffer?.length) {
       throw new BadRequestException('file is required');
     }
@@ -86,10 +83,18 @@ export class ChatbotController {
       ...(chunkSize ? { chunkSize } : {}),
       ...(chunkOverlap !== undefined ? { chunkOverlap } : {}),
     };
-    return firstValueFrom(this.chatbotService.send(CHATBOT_PATTERNS.UPSERT_DOCUMENT, payload));
+    return firstValueFrom(
+      this.chatbotService.send<{ documentId: string; fileName: string; chunkCount: number }>(
+        CHATBOT_PATTERNS.UPSERT_DOCUMENT,
+        payload,
+      ),
+    );
   }
 
-  private parseOptionalNumber(value: number | string | undefined, fieldName: string): number | undefined {
+  private parseOptionalNumber(
+    value: number | string | undefined,
+    fieldName: string,
+  ): number | undefined {
     if (value === undefined || value === null || value === '') {
       return undefined;
     }

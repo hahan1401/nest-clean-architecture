@@ -48,4 +48,4 @@ async function bootstrap() {
   );
   logger.log(`Socket proxy enabled: /socket.io -> ${notificationSocketTarget}`, 'Bootstrap');
 }
-bootstrap();
+void bootstrap();

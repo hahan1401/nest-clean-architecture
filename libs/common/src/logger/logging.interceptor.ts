@@ -16,7 +16,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const type = context.getType();
 
     if (type === 'rpc') {
-      const data = context.switchToRpc().getData() as { requestId?: string } | undefined;
+      const data = context.switchToRpc().getData<{ requestId?: string } | undefined>();
       const requestId = data?.requestId;
       const pattern = context.getHandler().name;
       this.logger.info({ requestId, pattern }, `RPC ${pattern} received`);
@@ -46,8 +46,7 @@ export class LoggingInterceptor implements NestInterceptor {
       const route = `${req?.method ?? ''} ${req?.url?.split('?')[0] ?? ''}`.trim();
       return next.handle().pipe(
         tap({
-          next: () =>
-            this.logger.info({ requestId, ms: Date.now() - start }, `${route} completed`),
+          next: () => this.logger.info({ requestId, ms: Date.now() - start }, `${route} completed`),
           error: (err: unknown) =>
             this.logger.warn(
               { requestId, ms: Date.now() - start, err: (err as Error)?.message },

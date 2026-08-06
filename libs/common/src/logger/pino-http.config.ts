@@ -1,4 +1,4 @@
-import { Params } from "nestjs-pino";
+import { Params } from 'nestjs-pino';
 
 type PinoHttpRequest = {
   url?: string;

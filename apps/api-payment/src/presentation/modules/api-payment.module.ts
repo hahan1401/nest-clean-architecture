@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { VnpayModule, VnpayService } from 'nestjs-vnpay';
+import { VnpayModule } from 'nestjs-vnpay';
 import { ignoreLogger } from 'vnpay';
 import { MyVnpayService } from '../../infrastructure/services/vnpay.service';
 import { PaymentController } from '../controllers/payment.controller';
@@ -16,7 +16,7 @@ import { VerifyIpnCallService } from '../../application/usecases/verify-ipn-call
     ConfigModule,
     VnpayModule.registerAsync({
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         secureSecret: configService.getOrThrow<string>('vnp_HashSecret'),
         tmnCode: configService.getOrThrow<string>('vnp_TmnCode'),
         vnpayHost: 'https://sandbox.vnpayment.vn',

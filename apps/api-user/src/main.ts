@@ -21,9 +21,8 @@ async function bootstrap() {
   app.flushLogs();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.listen();
-  app.get(Logger).log(
-    `User service is running on port ${process.env.USER_SERVICE_PORT || '3001'}`,
-    'Bootstrap',
-  );
+  app
+    .get(Logger)
+    .log(`User service is running on port ${process.env.USER_SERVICE_PORT || '3001'}`, 'Bootstrap');
 }
-bootstrap();
+void bootstrap();

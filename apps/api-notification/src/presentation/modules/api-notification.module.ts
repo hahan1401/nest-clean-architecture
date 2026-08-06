@@ -21,8 +21,8 @@ import { NotificationController } from '../controllers/notification.controller';
       ],
       defaultSubscribeErrorBehavior: MessageHandlerErrorBehavior.NACK,
       enableControllerDiscovery: true,
-      deserializer: (msg: Buffer) => {
-        const parsed = JSON.parse(msg.toString());
+      deserializer: (msg: Buffer): unknown => {
+        const parsed = JSON.parse(msg.toString()) as { data?: unknown } | null;
         return parsed?.data ?? parsed;
       },
     }),

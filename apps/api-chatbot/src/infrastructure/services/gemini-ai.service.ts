@@ -149,7 +149,7 @@ export class GeminiAIService extends ChatBotServicePort {
       }
 
       return embedding;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error({ err: error }, 'Error generating embedding');
       throw new DependencyError('Failed to generate embedding for the chunk', error);
     }
@@ -209,7 +209,7 @@ export class GeminiAIService extends ChatBotServicePort {
       );
 
       return result;
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error({ err: e }, 'Chunk match query failed');
       throw e;
     }
@@ -263,7 +263,7 @@ export class GeminiAIService extends ChatBotServicePort {
     return new Observable((observer) => {
       let isCancelled = false;
 
-      (async () => {
+      void (async () => {
         try {
           const stream = await this.ai.interactions.create({
             model: 'gemini-3.6-flash',
@@ -284,7 +284,7 @@ export class GeminiAIService extends ChatBotServicePort {
           if (!isCancelled) {
             observer.complete();
           }
-        } catch (error) {
+        } catch (error: unknown) {
           if (!isCancelled) {
             observer.error(error);
           }
@@ -299,13 +299,13 @@ export class GeminiAIService extends ChatBotServicePort {
   }
   apiStrictlyGenerateSSe(prompt: string): Observable<{ data: string }> {
     return new Observable((observer) => {
-      (async () => {
+      void (async () => {
         try {
           let groundedPrompt: string | null;
 
           try {
             groundedPrompt = await this.buildGroundedPrompt(prompt);
-          } catch (error) {
+          } catch (error: unknown) {
             this.logger.error({ err: error }, 'Failed to build grounded prompt');
             throw error;
           }
@@ -336,11 +336,11 @@ export class GeminiAIService extends ChatBotServicePort {
             }
 
             observer.complete();
-          } catch (error) {
+          } catch (error: unknown) {
             this.logger.error({ err: error }, 'Failed while streaming AI response');
             throw error;
           }
-        } catch (error) {
+        } catch (error: unknown) {
           this.logger.error({ err: error }, 'apiStrictlyGenerateSSe failed');
 
           observer.next({
@@ -478,7 +478,7 @@ export class GeminiAIService extends ChatBotServicePort {
             input.fileName,
           );
           documentId = inserted[0]?.id;
-        } catch (error) {
+        } catch (error: unknown) {
           this.logger.error({ err: error, fileName: input.fileName }, 'Error inserting document');
           throw new DependencyError(`Failed to insert document`, error);
         }

@@ -10,7 +10,10 @@ import { ApiEmailModule } from './presentation/modules/api-email.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: [join(process.cwd(), '.env.local'), join(process.cwd(), 'apps/api-email/.env.local')],
+      envFilePath: [
+        join(process.cwd(), '.env.local'),
+        join(process.cwd(), 'apps/api-email/.env.local'),
+      ],
     }),
     LoggerModule.forRoot({
       pinoHttp: createPinoHttpConfig('API-EMAIL'),
