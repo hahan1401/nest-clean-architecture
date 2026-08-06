@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notification WebSocket Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        input, button {
+            padding: 10px;
+            margin: 10px 5px;
+            font-size: 14px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #messages {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .message {
+            padding: 8px;
+            margin: 5px 0;
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            border-radius: 4px;
+        }
+        .status {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Notification WebSocket Client</h1>
+        
+        <div>
+            <label for="userId">User ID:</label>
+            <input type="text" id="userId" placeholder="Enter user ID (e.g., 123)" value="user123">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+        </div>
+
+        <div>
+            <span id="status" class="status disconnected">Disconnected</span>
+        </div>
+
+        <div>
+            <h3>Messages:</h3>
+            <div id="messages"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+        const messagesDiv = document.getElementById('messages');
+        const statusDiv = document.getElementById('status');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const userIdInput = document.getElementById('userId');
+
+        function addMessage(message, type = 'info') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `
+                <strong>${new Date().toLocaleTimeString()}</strong> - ${message}
+            `;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            if (connected) {
+                statusDiv.textContent = 'Connected';
+                statusDiv.className = 'status connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                statusDiv.textContent = 'Disconnected';
+                statusDiv.className = 'status disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function connect() {
+            const userId = userIdInput.value.trim();
+            if (!userId) {
+                alert('Please enter a user ID');
+                return;
+            }
+
+            const serverUrl = 'http://localhost:3000';
+            const namespace = `/notification/${userId}`;
+            
+            addMessage(`Connecting to ${serverUrl}${namespace}...`);
+
+            socket = io(`${serverUrl}${namespace}`, {
+                transports: ['websocket', 'polling'],
+                reconnection: true,
+                reconnectionDelay: 1000,
+                reconnectionAttempts: 5,
+                auth: {
+                    userId: userId
+                }
+            });
+
+            socket.on('connect', () => {
+                addMessage(`✅ Connected successfully!`);
+                updateStatus(true);
+            });
+
+            socket.on('connected', (data) => {
+                addMessage(`📨 Server says: ${data.message}`);
+            });
+
+            socket.on('notification', (data) => {
+                addMessage(`🔔 NOTIFICATION: ${data.message} (type: ${data.type})`);
+            });
+
+            socket.on('disconnect', (reason) => {
+                addMessage(`❌ Disconnected: ${reason}`);
+                updateStatus(false);
+            });
+
+            socket.on('connect_error', (error) => {
+                addMessage(`⚠️ Connection error: ${error.message}`);
+                updateStatus(false);
+            });
+
+            socket.on('error', (error) => {
+                addMessage(`⚠️ Error: ${error}`);
+            });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                addMessage('🔌 Manually disconnected');
+                updateStatus(false);
+            }
+        }
+
+        // Auto-connect on page load (optional)
+        // window.addEventListener('load', () => {
+        //     connect();
+        // });
+    </script>
+</body>
+</html>

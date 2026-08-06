@@ -29,7 +29,15 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
+      'prettier/prettier': ['error', { endOfLine: 'auto' }],
+    },
+  },
+  {
+    // Referencing a jest mock method (e.g. `expect(repo.findById)`) is a false
+    // positive for unbound-method: the mock is not a real unbound instance method.
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 );

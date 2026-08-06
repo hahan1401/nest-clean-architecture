@@ -1,0 +1,36 @@
+services:
+  nest-clean-architecture-db:
+    image: pgvector/pgvector:pg17
+    container_name: nest-clean-architecture-db
+    environment:
+      PGDATA: /data/postgres
+      POSTGRES_HOST_AUTH_METHOD: 'trust'
+    volumes:
+      - nest-clean-architecture-db:/data/postgres
+    ports:
+      - 5432:5432
+    networks:
+      - network
+    restart: always
+
+  nest-clean-architecture-rabbitmq:
+    image: rabbitmq:4-management
+    container_name: nest-clean-architecture-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - nest-clean-architecture-rabbitmq:/var/lib/rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - network
+    restart: always
+
+volumes:
+  nest-clean-architecture-db:
+  nest-clean-architecture-rabbitmq:
+networks:
+  network:
+    driver: bridge
