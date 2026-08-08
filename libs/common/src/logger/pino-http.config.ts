@@ -10,6 +10,18 @@ type PinoHttpRequest = {
 
 const isPrettyLoggingEnabled = process.env.NODE_ENV !== 'production';
 
+/**
+ * Paths whose last segment is a bearer credential rather than an identifier.
+ * `redact.paths` cannot help here: it matches object properties, not a substring
+ * of a URL, so the token has to be masked while the URL is still being built.
+ */
+const CREDENTIAL_PATH_PREFIXES = ['/bookings/cancel/'];
+
+const maskCredentialSegments = (url: string): string => {
+  const prefix = CREDENTIAL_PATH_PREFIXES.find((candidate) => url.startsWith(candidate));
+  return prefix ? `${prefix}[REDACTED]` : url;
+};
+
 export function createPinoHttpConfig(serviceName: string): Params['pinoHttp'] {
   return {
     customProps: (req: PinoHttpRequest) => ({
@@ -19,8 +31,9 @@ export function createPinoHttpConfig(serviceName: string): Params['pinoHttp'] {
     autoLogging: false,
     serializers: {
       req: (req: PinoHttpRequest) => {
+        const path = req.url?.split('?')[0];
         return {
-          url: req.url?.split('?')[0],
+          url: path === undefined ? undefined : maskCredentialSegments(path),
           method: req.method,
           requestId: req.requestId,
           query: req.query,

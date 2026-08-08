@@ -47,3 +47,220 @@ model DocumentChunk {
   @@index([documentId])
   @@map("document_chunks")
 }
+
+// ---------------------------------------------------------------------------
+// Booking domain (apps/api-booking)
+//
+// Money convention: every *price / *amount column is a whole number of VND
+// (dong). VND has no minor unit, so there is no scaling factor anywhere.
+// ---------------------------------------------------------------------------
+
+/// PENDING holds the slot the moment it is created; CONFIRMED is the explicit
+/// confirm step that fires the emails; COMPLETED is set by the daily job once
+/// the stay/departure has elapsed; CANCELLED and EXPIRED release the slot.
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+
+  @@map("booking_status")
+}
+
+enum BookableType {
+  ROOM
+  TOUR
+
+  @@map("bookable_type")
+}
+
+enum DepartureStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+
+  @@map("departure_status")
+}
+
+/// Where a frozen line price came from, so a receipt can explain itself.
+enum PriceSource {
+  BASE
+  RULE
+  DEPARTURE_OVERRIDE
+
+  @@map("price_source")
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  maxGuests   Int      @map("max_guests")
+  /// Nightly rate in whole VND. Overridable per night by PriceRule.
+  basePrice   Int      @map("base_price")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  bookings   Booking[]
+  priceRules PriceRule[]
+
+  @@index([isActive, maxGuests])
+  @@map("rooms")
+}
+
+model Tour {
+  id                 String   @id @default(uuid())
+  slug               String   @unique
+  name               String
+  description        String?
+  durationDays       Int      @map("duration_days")
+  /// Per-person price in whole VND.
+  basePricePerPerson Int      @map("base_price_per_person")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  departures TourDeparture[]
+  priceRules PriceRule[]
+
+  @@index([isActive])
+  @@map("tours")
+}
+
+/// A dated, seat-capped instance of a Tour. Many bookings share one departure.
+model TourDeparture {
+  id            String          @id @default(uuid())
+  tourId        String          @map("tour_id")
+  departureDate DateTime        @map("departure_date") @db.Date
+  capacity      Int
+  /// Seats held by PENDING + CONFIRMED + COMPLETED bookings. Maintained inside
+  /// the same transaction as the booking write and guarded by
+  /// tour_departures_seats_check.
+  bookedSeats   Int             @default(0) @map("booked_seats")
+  /// Per-departure price per person in whole VND. Beats PriceRule when set.
+  priceOverride Int?            @map("price_override")
+  status        DepartureStatus @default(OPEN)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  tour     Tour      @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([tourId, departureDate])
+  @@index([status, departureDate])
+  @@map("tour_departures")
+}
+
+/// Overrides the base price of exactly one Room or one Tour, for a date window
+/// and/or a day-of-week set. Exactly one of roomId/tourId is set, enforced by
+/// price_rules_target_check.
+model PriceRule {
+  id         String    @id @default(uuid())
+  name       String
+  roomId     String?   @map("room_id")
+  tourId     String?   @map("tour_id")
+  /// Inclusive window; NULL on either side means unbounded there.
+  startDate  DateTime? @map("start_date") @db.Date
+  endDate    DateTime? @map("end_date") @db.Date
+  /// Postgres DOW numbering: 0 = Sunday .. 6 = Saturday (matches Date#getUTCDay
+  /// and EXTRACT(DOW)). Empty array = applies to every day in the window.
+  daysOfWeek Int[]     @map("days_of_week")
+  /// Overriding price in whole VND: per night for rooms, per person for tours.
+  amount     Int
+  /// Higher wins. Ties broken by specificity, then window width, then recency.
+  priority   Int       @default(0)
+  isActive   Boolean   @default(true) @map("is_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  room         Room?         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tour         Tour?         @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  bookingLines BookingLine[]
+
+  @@index([roomId, isActive, startDate, endDate])
+  @@index([tourId, isActive, startDate, endDate])
+  @@map("price_rules")
+}
+
+/// One booking = one product. ROOM rows use (roomId, checkIn, checkOut);
+/// TOUR rows use (tourDepartureId, seats). Enforced by bookings_shape_check.
+model Booking {
+  id     String        @id @default(uuid())
+  /// Human-facing code, e.g. "BK-7F3K9Q2A". Quoted over the phone and printed in
+  /// emails, so it is deliberately short and NOT a secret.
+  reference String     @unique
+  /// Bearer credential for the self-service cancel link. Unguessable random hex;
+  /// never derived from the reference, the id, or a timestamp.
+  cancellationToken String @unique @map("cancellation_token")
+  type   BookableType
+  status BookingStatus @default(PENDING)
+
+  roomId   String?   @map("room_id")
+  checkIn  DateTime? @map("check_in") @db.Date
+  checkOut DateTime? @map("check_out") @db.Date
+
+  tourDepartureId String? @map("tour_departure_id")
+  seats           Int?
+
+  guests        Int
+  customerName  String @map("customer_name")
+  customerEmail String @map("customer_email")
+  customerPhone String @map("customer_phone")
+
+  /// Frozen grand total in whole VND. Equals SUM(booking_lines.amount) - both
+  /// are produced from the same resolved breakdown in one transaction.
+  totalAmount Int    @map("total_amount")
+  /// Present so future multi-currency is a data change, not a schema change.
+  currency    String @default("VND")
+
+  notes String?
+  /// PENDING holds expire at this instant; the sweep flips them to EXPIRED.
+  holdExpiresAt DateTime? @map("hold_expires_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+  cancelledAt   DateTime? @map("cancelled_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Restrict, not Cascade: booking history must outlive product edits.
+  // Retiring a room/tour is isActive = false, never a DELETE.
+  room          Room?          @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  tourDeparture TourDeparture? @relation(fields: [tourDepartureId], references: [id], onDelete: Restrict)
+  lines         BookingLine[]
+
+  @@index([roomId, status, checkIn, checkOut])
+  @@index([tourDepartureId, status])
+  @@index([status, holdExpiresAt])
+  @@index([customerEmail, createdAt])
+  @@map("bookings")
+}
+
+/// Frozen price breakdown. One row per stay night for rooms; one row for tours.
+/// Never recomputed - history stays accurate when base prices or rules change.
+model BookingLine {
+  id        String   @id @default(uuid())
+  bookingId String   @map("booking_id")
+  /// Stay night for rooms (checkIn .. checkOut-1); departure date for tours.
+  lineDate  DateTime @map("line_date") @db.Date
+  /// 1 per night for rooms; seat count for tours.
+  quantity  Int
+  /// Frozen unit price in whole VND at the moment of booking.
+  unitAmount  Int         @map("unit_amount")
+  /// quantity * unitAmount, frozen.
+  amount      Int
+  priceSource PriceSource @map("price_source")
+  /// SetNull: deleting a rule must not destroy history; the amount is frozen.
+  priceRuleId String?     @map("price_rule_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  booking   Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  priceRule PriceRule? @relation(fields: [priceRuleId], references: [id], onDelete: SetNull)
+
+  @@unique([bookingId, lineDate])
+  @@index([priceRuleId])
+  @@index([lineDate])
+  @@map("booking_lines")
+}

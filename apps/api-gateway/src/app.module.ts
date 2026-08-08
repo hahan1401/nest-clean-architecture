@@ -1,4 +1,4 @@
-import { CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
+import { BOOKING_SERVICE, CHATBOT_SERVICE, PAYMENT_SERVICE, USER_SERVICE } from '@app/common';
 import {
   EMAIL_EXCHANGE,
   EMAIL_SERVICE,
@@ -21,6 +21,10 @@ import { UserController } from './controllers/user.controller';
 import { ChatbotController } from './controllers/chatbot.controller';
 import { NotificationController } from './controllers/notification.controller';
 import { EmailController } from './controllers/email.controller';
+import { RoomController } from './controllers/room.controller';
+import { TourController } from './controllers/tour.controller';
+import { BookingController } from './controllers/booking.controller';
+import { PriceRuleController } from './controllers/price-rule.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -66,6 +70,16 @@ import { EmailController } from './controllers/email.controller';
     ]),
     ClientsModule.register([
       {
+        name: BOOKING_SERVICE,
+        transport: Transport.TCP,
+        options: {
+          host: process.env.BOOKING_SERVICE_HOST || 'localhost',
+          port: parseInt(process.env.BOOKING_SERVICE_PORT || '3006'),
+        },
+      },
+    ]),
+    ClientsModule.register([
+      {
         name: EMAIL_SERVICE,
         transport: Transport.RMQ,
         options: {
@@ -104,6 +118,10 @@ import { EmailController } from './controllers/email.controller';
     ChatbotController,
     NotificationController,
     EmailController,
+    RoomController,
+    TourController,
+    BookingController,
+    PriceRuleController,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsHttpFilter },

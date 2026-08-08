@@ -88,6 +88,15 @@
       "compilerOptions": {
         "tsConfigPath": "libs/database/tsconfig.lib.json"
       }
+    },
+    "api-booking": {
+      "type": "application",
+      "root": "apps/api-booking",
+      "entryFile": "main",
+      "sourceRoot": "apps/api-booking/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/api-booking/tsconfig.app.json"
+      }
     }
   }
 }
