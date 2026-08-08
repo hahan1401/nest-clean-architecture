@@ -65,7 +65,16 @@ export function normalizeError(exception: unknown): NormalizedError {
   }
 
   if (exception && typeof exception === 'object') {
-    const e = exception as { code?: unknown; status?: unknown; message?: unknown };
+    const e = exception as { code?: unknown; status?: unknown; message?: unknown; error?: unknown };
+
+    // A DomainError crossing TCP arrives wrapped: Nest serializes an
+    // RpcException carrying an object as `{ error: <payload>, message }`, so the
+    // code and status live one level down. Without this the envelope only
+    // matches the message-only branch below and every 404/409 from a
+    // microservice would surface at the gateway as a 500.
+    if (e.error && typeof e.error === 'object' && e.error !== exception) {
+      return normalizeError(e.error);
+    }
 
     if (typeof e.code === 'string' && e.code in HTTP_STATUS_BY_CODE) {
       const code = e.code as ErrorCode;
