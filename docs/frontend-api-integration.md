@@ -1,0 +1,787 @@
+# Frontend API Integration Guide
+
+Everything a browser or mobile client needs to talk to this system. All traffic goes through
+**`api-gateway`** — the microservices behind it speak TCP/RabbitMQ and are not reachable from a
+client.
+
+- Backend design and rationale: [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+- Shared request/response types: `libs/common/src/dtos/` (importable if your frontend lives in
+  this repo)
+
+---
+
+## 1. Connection
+
+| | Value |
+|---|---|
+| Base URL (dev) | `http://localhost:3000` — override with `GATEWAY_PORT` |
+| Content type | `application/json` (except the chatbot upload, which is `multipart/form-data`) |
+| CORS | `app.enableCors()` with defaults — **every origin allowed, no credentials mode**. Lock this down before production. |
+| Auth | **None.** There is no login, token, or session anywhere in the gateway today. Every endpoint is public, including the admin-shaped ones (`POST /rooms`, `POST /price-rules`, `POST /bookings/:id/confirm`). Treat this as a pre-auth codebase — do not ship it to the public internet as-is. |
+| Realtime | Socket.IO, proxied by the gateway at `/socket.io` (see §8) |
+
+### Request correlation
+
+`CorrelationRequestIdMiddleware` runs on every route:
+
+- Send an `x-request-id` header and it is reused verbatim.
+- Omit it and the gateway generates a UUID.
+- Either way the value comes back on the **response** `x-request-id` header, appears in the error
+  body, and is threaded through every downstream service log.
+
+Always generate one client-side and log it — it is the only handle you have when asking a backend
+engineer why a call failed.
+
+```ts
+const requestId = crypto.randomUUID();
+fetch(url, { headers: { 'x-request-id': requestId } });
+```
+
+---
+
+## 2. Conventions you must get right
+
+### Money is an integer number of VND
+
+`basePrice`, `amount`, `totalAmount`, `unitAmount` are whole VND in a JSON `number`. There is no
+minor unit and no scaling factor — `250000` means ₫250,000. Never divide by 100. Format for
+display only:
+
+```ts
+new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(250000);
+// "250.000 ₫"
+```
+
+### Two different date shapes
+
+| Kind | Fields | Format |
+|---|---|---|
+| **Calendar dates** | `checkIn`, `checkOut`, `departureDate`, `from`, `to`, `startDate`, `endDate`, price-line `date` | Date-only string `"2027-02-14"` — **in and out** |
+| **Timestamps** | `createdAt`, `updatedAt`, `holdExpiresAt`, `confirmedAt`, `cancelledAt`, `completedAt` | Full ISO 8601 with `Z` |
+
+Calendar fields are validated with `@IsDateString({ strict: true })`. Sending
+`"2027-02-14T00:00:00.000Z"` where a date-only string is expected is rejected with a 400.
+
+Build them without letting the local timezone shift the day:
+
+```ts
+// ✅ safe — no timezone involved
+const toDateOnly = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// ❌ in UTC-negative zones this returns yesterday
+const wrong = (d: Date) => d.toISOString().slice(0, 10);
+```
+
+Room stays are **half-open ranges** `[checkIn, checkOut)`. A stay of `2027-02-14 → 2027-02-16` is
+two nights, and someone else may check in on the 16th. Nights = `checkOut - checkIn`.
+
+### Weekdays are Postgres DOW
+
+`daysOfWeek` on a price rule uses `0 = Sunday … 6 = Saturday`, which matches JavaScript's
+`Date.prototype.getUTCDay()`. An empty or absent array means "every day".
+
+### Unknown body fields are silently dropped
+
+The gateway runs `ValidationPipe({ whitelist: true, transform: true })`. Properties not declared on
+the DTO are **stripped without error** — a typo'd field name fails silently rather than 400ing. If a
+value seems ignored, check the spelling against the tables below.
+
+`transform: true` also coerces query strings, so `?take=20` arrives as the number `20`.
+
+---
+
+## 3. The error contract
+
+Every failure — validation, domain conflict, a crashed microservice — is rendered by
+`AllExceptionsHttpFilter` into the same body:
+
+```json
+{
+  "statusCode": 409,
+  "code": "CONFLICT",
+  "message": "Those dates are no longer available for this room",
+  "requestId": "6f1c2b6e-...",
+  "timestamp": "2026-08-08T09:12:44.501Z",
+  "path": "/bookings"
+}
+```
+
+| `code` | HTTP | What it means for the UI |
+|---|---|---|
+| `VALIDATION` | 400 | The request was malformed. Show field-level feedback; do not retry unchanged. |
+| `UNAUTHORIZED` | 401 | Reserved — nothing emits it today. |
+| `FORBIDDEN` | 403 | Reserved — nothing emits it today. |
+| `NOT_FOUND` | 404 | The room/tour/booking id or reference does not exist. |
+| `CONFLICT` | 409 | **The important one.** Someone else took the slot, or the booking is in a state that forbids the action. Refresh availability and re-render — see §7. |
+| `DEPENDENCY_FAILURE` | 502 | A downstream service or broker is unhealthy. Safe to retry with backoff. |
+| `INTERNAL` | 500 | Unexpected. Surface the `requestId` and stop. |
+
+**Branch on `code`, never on `message`.** Messages are human-readable prose written for operators
+and change freely; `code` is the stable contract.
+
+`class-validator` failures arrive as a single `message` string with the individual violations joined
+by `", "`:
+
+```json
+{
+  "statusCode": 400,
+  "code": "VALIDATION",
+  "message": "guests must not be less than 1, customer.email must be an email",
+  "requestId": "…"
+}
+```
+
+To render per-field errors, split on `", "` and match the leading property path.
+
+---
+
+## 4. A typed client
+
+Drop this in and build every call on top of it.
+
+```ts
+// api/client.ts
+export type ErrorCode =
+  | 'VALIDATION'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'DEPENDENCY_FAILURE'
+  | 'INTERNAL';
+
+export interface ApiErrorBody {
+  statusCode: number;
+  code: ErrorCode;
+  message: string;
+  requestId?: string;
+  timestamp: string;
+  path: string;
+}
+
+export class ApiError extends Error {
+  constructor(
+    readonly code: ErrorCode,
+    readonly status: number,
+    message: string,
+    readonly requestId?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+
+  /** Field-level messages, when the failure came from class-validator. */
+  get fieldMessages(): string[] {
+    return this.code === 'VALIDATION' ? this.message.split(', ') : [];
+  }
+}
+
+const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+
+export async function api<T>(
+  path: string,
+  init: RequestInit & { query?: Record<string, unknown> } = {},
+): Promise<T> {
+  const { query, ...rest } = init;
+
+  const url = new URL(path, BASE_URL);
+  for (const [k, v] of Object.entries(query ?? {})) {
+    if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
+  }
+
+  const requestId = crypto.randomUUID();
+  const isFormData = rest.body instanceof FormData;
+
+  const res = await fetch(url, {
+    ...rest,
+    headers: {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      'x-request-id': requestId,
+      ...rest.headers,
+    },
+  });
+
+  // 204 No Content: DELETE /users/:id and DELETE /price-rules/:id
+  if (res.status === 204) return undefined as T;
+
+  const body: unknown = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const err = body as ApiErrorBody | null;
+    throw new ApiError(
+      err?.code ?? 'INTERNAL',
+      res.status,
+      err?.message ?? res.statusText,
+      err?.requestId ?? res.headers.get('x-request-id') ?? requestId,
+    );
+  }
+
+  return body as T;
+}
+```
+
+Usage:
+
+```ts
+import { api, ApiError } from './api/client';
+
+try {
+  const booking = await api<BookingResponse>('/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+} catch (e) {
+  if (e instanceof ApiError && e.code === 'CONFLICT') {
+    await refreshAvailability();
+    toast('That slot was just taken — here are the current options.');
+  } else if (e instanceof ApiError && e.code === 'VALIDATION') {
+    setFieldErrors(e.fieldMessages);
+  } else {
+    throw e;
+  }
+}
+```
+
+---
+
+## 5. Shared response types
+
+Mirror of `libs/common/src/dtos/`. If your frontend is inside this monorepo, import from
+`@app/common` instead of copying.
+
+```ts
+export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
+export type BookableType = 'ROOM' | 'TOUR';
+export type DepartureStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
+export type PriceSource = 'BASE' | 'RULE' | 'DEPARTURE_OVERRIDE';
+
+export interface RoomResponse {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  maxGuests: number;
+  basePrice: number;     // VND per night
+  isActive: boolean;
+}
+
+export interface PriceQuoteLineResponse {
+  date: string | null;   // "YYYY-MM-DD" — one line per night (ROOM), one line total (TOUR)
+  quantity: number;
+  unitAmount: number;
+  amount: number;
+  source: PriceSource;
+  priceRuleId: string | null;
+}
+
+export interface PriceQuoteResponse {
+  currency: string;      // "VND"
+  total: number;
+  lines: PriceQuoteLineResponse[];
+}
+
+export interface RoomAvailabilityResponse {
+  room: RoomResponse;
+  available: boolean;
+  quote: PriceQuoteResponse | null;   // null when unavailable
+}
+
+export interface TourResponse {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  durationDays: number;
+  basePricePerPerson: number;
+  isActive: boolean;
+}
+
+export interface TourDepartureResponse {
+  id: string;
+  tourId: string;
+  departureDate: string | null;
+  capacity: number;
+  bookedSeats: number;
+  remainingSeats: number;
+  priceOverride: number | null;
+  status: DepartureStatus;
+}
+
+export interface AvailableDepartureResponse extends TourDepartureResponse {
+  tourName: string;
+  pricePerPerson: number;
+}
+
+export interface PriceRuleResponse {
+  id: string;
+  name: string;
+  roomId: string | null;
+  tourId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  daysOfWeek: number[];  // 0 = Sunday
+  amount: number;
+  priority: number;
+  isActive: boolean;
+}
+
+export interface BookingLineResponse {
+  date: string | null;
+  quantity: number;
+  unitAmount: number;
+  amount: number;
+  priceSource: PriceSource;
+}
+
+export interface BookingResponse {
+  id: string;
+  reference: string;              // human-quotable, e.g. on the phone
+  type: BookableType;
+  status: BookingStatus;
+
+  roomId: string | null;          // ROOM bookings
+  checkIn: string | null;
+  checkOut: string | null;
+
+  tourDepartureId: string | null; // TOUR bookings
+  seats: number | null;
+
+  guests: number;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+
+  totalAmount: number;
+  currency: string;
+  notes: string | null;
+
+  holdExpiresAt: string | null;   // ISO timestamp — PENDING deadline
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+
+  lines: BookingLineResponse[] | null;
+}
+
+export interface UserResponse {
+  id: string;
+  name: string;
+  email: string;
+  locationName: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserWithDistanceResponse extends UserResponse {
+  distanceKm: number;
+}
+```
+
+> **`cancellationToken` is deliberately absent from `BookingResponse`.** It is a bearer credential
+> that only ever travels inside the customer's confirmation email. Do not build a UI that expects to
+> read it from the API — you cannot.
+
+---
+
+## 6. Endpoint reference
+
+### Rooms — `/rooms`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `POST` | `/rooms` | `CreateRoomDto` | `201` `RoomResponse` |
+| `GET` | `/rooms` | `skip?`, `take?` (1–100), `guests?` | `200` `RoomResponse[]` |
+| `GET` | `/rooms/availability` | `from`, `to` (**required**), `guests?`, `skip?`, `take?` | `200` `RoomAvailabilityResponse[]` |
+| `GET` | `/rooms/:id` | — | `200` `RoomResponse` |
+| `GET` | `/rooms/:id/availability` | `from`, `to` (**required**) | `200` `RoomAvailabilityResponse` (single) |
+| `GET` | `/rooms/:id/bookings` | `status?`, `from?`, `to?`, `skip?`, `take?` | `200` `BookingResponse[]` |
+
+`CreateRoomDto`: `code` (≤32), `name` (≤120), `description?` (≤2000), `maxGuests` (1–50),
+`basePrice` (integer ≥ 0). A duplicate `code` returns `409`.
+
+`/rooms/availability` is the search endpoint you want for a date-range picker — it returns each room
+with its `available` flag *and* a priced quote in one round trip.
+
+### Tours — `/tours`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `POST` | `/tours` | `CreateTourDto` | `201` `TourResponse` |
+| `GET` | `/tours` | `skip?`, `take?` | `200` `TourResponse[]` |
+| `GET` | `/tours/availability` | `from`, `to` (**required**), `seats?` | `200` `AvailableDepartureResponse[]` |
+| `GET` | `/tours/:id` | — | `200` `TourResponse` |
+| `POST` | `/tours/:id/departures` | `CreateTourDepartureDto` | `201` `TourDepartureResponse` |
+| `GET` | `/tours/:id/departures` | `from?`, `to?` | `200` `TourDepartureResponse[]` |
+| `GET` | `/tours/:id/availability` | `from`, `to` (**required**), `seats?` | `200` `AvailableDepartureResponse[]` |
+| `GET` | `/tours/:id/bookings` | `status?`, `from?`, `to?`, `skip?`, `take?` | `200` `BookingResponse[]` |
+
+`CreateTourDto`: `slug` (≤120, unique), `name` (≤120), `description?`, `durationDays` (≥1),
+`basePricePerPerson` (integer ≥ 0).
+
+`CreateTourDepartureDto`: `departureDate` (date-only, **not in the past**), `capacity` (≥1),
+`priceOverride?` (integer ≥ 0).
+
+### Price rules — `/price-rules`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `POST` | `/price-rules` | `CreatePriceRuleDto` | `201` `PriceRuleResponse` |
+| `GET` | `/price-rules` | `roomId?`, `tourId?` | `200` `PriceRuleResponse[]` |
+| `DELETE` | `/price-rules/:id` | — | `204` no body |
+
+`CreatePriceRuleDto`: `name`, **exactly one** of `roomId` / `tourId` (both or neither → `400`),
+`startDate?`, `endDate?` (date-only; `endDate` must not precede `startDate`), `daysOfWeek?`
+(0–6, ≤7 entries), `amount` (integer ≥ 0), `priority?`.
+
+Resolution when several rules match: explicit `priority`, then specificity, then the narrower date
+window, then recency. The winner is frozen into `booking_lines` at creation time, so editing a rule
+later never rewrites an existing booking's price.
+
+### Bookings — `/bookings`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `POST` | `/bookings/quote` | `QuotePriceDto` | `200` `PriceQuoteResponse` |
+| `POST` | `/bookings` | `CreateBookingDto` | `201` `BookingResponse` (`PENDING`) |
+| `GET` | `/bookings/:id` | — | `200` `BookingResponse` |
+| `GET` | `/bookings/reference/:reference` | — | `200` `BookingResponse` |
+| `POST` | `/bookings/:id/confirm` | — | `200` `BookingResponse` (`CONFIRMED`) |
+| `POST` | `/bookings/:id/cancel` | `{ reason?: string }` | `200` `BookingResponse` (`CANCELLED`) |
+| `GET` | `/bookings/cancel/:token` | — | `200` `BookingResponse` — **read-only** |
+| `POST` | `/bookings/cancel/:token` | `{ reason?: string }` | `200` `BookingResponse` |
+
+`CreateBookingDto`:
+
+```ts
+{
+  type: 'ROOM' | 'TOUR',
+
+  // ROOM
+  roomId?: string,
+  checkIn?: string,          // "YYYY-MM-DD", not in the past
+  checkOut?: string,         // must be after checkIn
+
+  // TOUR
+  tourDepartureId?: string,
+  seats?: number,            // ≥1, must equal `guests`
+
+  guests: number,            // ≥1, ≤ room.maxGuests for ROOM
+  customer: { name: string; email: string; phone: string },
+  notes?: string,            // ≤2000
+}
+```
+
+`QuotePriceDto` is the same minus `guests`, `customer` and `notes`.
+
+Route-order note: `/bookings/reference/:reference` and `/bookings/cancel/:token` are declared before
+`/bookings/:id`, so a booking can never be looked up under the literal id `"reference"`.
+
+### Users — `/users`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `POST` | `/users` | `{ name, email, password }` (password ≥6) | `201` `UserResponse` |
+| `GET` | `/users` | — | `200` `UserResponse[]` |
+| `GET` | `/users/:id` | — | `200` `UserResponse` |
+| `PUT` | `/users/:id` | `{ name?, email?, password? }` | `200` `UserResponse` |
+| `DELETE` | `/users/:id` | — | `204` no body |
+| `PATCH` | `/users/:id/location` | `{ latitude, longitude }` | `200` `UserResponse` |
+| `GET` | `/users/:id/nearby` | `radius?` (integer km, default `10`) | `200` `UserWithDistanceResponse[]` |
+
+`PATCH /users/:id/location` also reverse-geocodes the coordinates and fills `locationName`, so it
+needs `api-location` running as well as `api-user`. `radius` goes through `ParseIntPipe` — a
+non-integer like `?radius=1.5` returns `400`.
+
+### Notifications and email — fire-and-forget
+
+These publish to RabbitMQ and return immediately. **`202 Accepted` means queued, not delivered.**
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| `POST` | `/notifications` | `{ userId, title, message, type?, data? }` | `202` `{ queued: true, requestId }` |
+| `POST` | `/notifications/broadcast` | `{ title, message, type?, data? }` | `202` `{ queued: true, requestId }` |
+| `POST` | `/emails` | `SendEmailDto` | `202` `{ queued: true, requestId }` |
+
+`type` is one of `'info' | 'success' | 'warning' | 'error'`. `title` ≤120, `message` ≤1000.
+
+`SendEmailDto`: `to` (non-empty array of emails), `subject` (≤200), `from?`, `cc?`, `bcc?`,
+`replyTo?`, `text?` (≤10000), `html?` (≤50000), `configurationSetName?`.
+
+Do not render "Sent ✓" off a 202. Show "Sending…" and confirm via the Socket.IO channel (§8) if you
+need real delivery feedback.
+
+### Chatbot — `/chatbot`
+
+| Method | Path | Query / Body | Returns |
+|---|---|---|---|
+| `GET` | `/chatbot/sse` | `prompt` | `text/event-stream` |
+| `GET` | `/chatbot/strict-sse` | `prompt` | `text/event-stream` — answers only from uploaded documents |
+| `POST` | `/chatbot/documents/upload` | `multipart/form-data` | `200` `{ documentId, fileName, chunkCount }` |
+
+Upload fields: `file` (required, UTF-8 text — an empty file is `400`), `fileName?` (falls back to the
+upload's own filename), `chunkSize?`, `chunkOverlap?`. See §9 for consumption code.
+
+### Payment — `/payment`
+
+| Method | Path | Returns |
+|---|---|---|
+| `GET` | `/payment/bank-list` | `200` VNPay bank list |
+| `POST` | `/payment/generate-qr` | `200` QR payload |
+| `POST` | `/payment/generate-payment-url` | `200` redirect URL |
+| `POST` | `/payment/generate-return-url` | `200` `{ verified, success, message, transaction, amount, data }` |
+| `GET` | `/payment/ipn` | `200` echoes the query string |
+
+⚠️ **These are not wired up yet.** The gateway forwards an empty `{}` payload to the payment service
+for all three `POST` routes, so any body you send is discarded — the downstream services expect a
+`PaymentRequest` (amount, order id, return URL) that never arrives. `GET /payment/ipn` at the gateway
+just echoes its query rather than calling the verifier. Payment is also not connected to the booking
+domain: confirming a booking takes no money. Do not build a checkout against these until the gateway
+forwards real payloads.
+
+---
+
+## 7. The booking flow
+
+The one flow worth walking through end to end, because its states are visible to the user.
+
+```
+   POST /rooms/availability?from&to        ← browse, priced
+              │
+   POST /bookings/quote                    ← firm price, no slot held  (200)
+              │
+   POST /bookings                          ← PENDING, slot HELD        (201)
+              │                              holdExpiresAt ≈ now + 30 min
+       ┌──────┴───────┬─────────────────┐
+       ▼              ▼                 ▼
+   /confirm       /cancel          hold expires
+   CONFIRMED      CANCELLED        EXPIRED (swept every ~10 min)
+       │
+       ▼
+   COMPLETED (nightly, after the stay/departure)
+```
+
+**1 — Quote.** `POST /bookings/quote` prices a room stay or a departure without touching
+availability. Use it to show a breakdown before the customer commits. It holds nothing.
+
+**2 — Create.** `POST /bookings` returns a `PENDING` booking with `holdExpiresAt` (default 30
+minutes, `BOOKING_HOLD_TTL_MINUTES`). The slot is genuinely held from this moment. Render a
+countdown from `holdExpiresAt`; when it lapses, stop offering "confirm" and re-check availability —
+a background sweep flips the row to `EXPIRED`, but the sweep runs on a cron (~10 min), so a booking
+can be past its deadline and still read as `PENDING`. Trust the timestamp, not the status.
+
+**3 — Confirm.** `POST /bookings/:id/confirm` transitions to `CONFIRMED` and triggers the customer
+and owner emails. The transition is its own idempotency guard: a double-submit returns
+`409 CONFLICT` with `"… is already confirmed"` and sends no second email. Treat that specific 409 as
+success — refetch the booking rather than showing a failure.
+
+**4 — Cancel.** `POST /bookings/:id/cancel` with an optional `reason`. Rejected with `409` when the
+booking is already `CANCELLED`/`EXPIRED`, already `COMPLETED`, or when the stay has already started.
+
+### Handling the availability race
+
+`409 CONFLICT` on `POST /bookings` is a normal outcome, not a bug — availability is enforced by a
+Postgres exclusion constraint and a conditional seat update, so two clients booking the last slot
+produce exactly one winner. The messages you will see:
+
+- `"Those dates are no longer available for this room"`
+- `"That departure no longer has enough seats"`
+- `"That departure is no longer open for booking"`
+
+Do not auto-retry — the slot is gone. Refresh availability and let the user pick again.
+
+### The emailed cancel link
+
+The confirmation email contains `PUBLIC_BASE_URL/bookings/cancel/<token>`. Point that at a frontend
+route that:
+
+1. calls `GET /bookings/cancel/:token` to render the booking for review, then
+2. calls `POST /bookings/cancel/:token` only on an explicit button press.
+
+**Never cancel on page load.** Mail clients, corporate scanners and link-preview bots fetch every URL
+in a message; a `GET` that cancelled would cancel bookings nobody ever clicked. The backend keeps the
+`GET` side-effect free for exactly this reason — your frontend must too.
+
+---
+
+## 8. Realtime notifications (Socket.IO)
+
+The gateway proxies `/socket.io` (HTTP and WebSocket upgrade) to `api-notification`, so connect to
+the **gateway origin** — the notification service port is an implementation detail.
+
+- **Namespace:** anything starting with `/notification`. The convention is `/notification/<userId>`.
+- **Identity:** `handshake.auth.userId`, falling back to the `userId` query param. A socket that
+  supplies neither is **disconnected immediately** — always pass it.
+- **Event:** `notification`, for both targeted and broadcast messages.
+
+```ts
+import { io, type Socket } from 'socket.io-client';
+
+export interface NotificationEvent {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  data?: Record<string, unknown>;
+  createdAt: string;   // ISO
+  userId?: string;     // absent on broadcasts
+}
+
+export function connectNotifications(
+  userId: string,
+  onNotification: (n: NotificationEvent) => void,
+): Socket {
+  const socket = io(`${import.meta.env.VITE_API_URL}/notification/${userId}`, {
+    transports: ['websocket', 'polling'],
+    auth: { userId },              // required — no userId means instant disconnect
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionAttempts: 5,
+  });
+
+  socket.on('notification', onNotification);
+  socket.on('connect_error', (err) => console.error('[notifications]', err.message));
+
+  return socket;
+}
+```
+
+Server-side, each user joins a room `user:<userId>`. `POST /notifications` emits into that room;
+`POST /notifications/broadcast` emits to the whole namespace.
+
+Two things to design around:
+
+- **Identity is unauthenticated.** Any client can claim any `userId` and receive that user's
+  notifications. Real auth (a JWT on the handshake) is a documented TODO in the socket gateway.
+- **Nothing is persisted.** Notifications are pushed to *connected* sockets only. There is no
+  history endpoint and no replay after reconnect — a user offline when one fires never sees it. If
+  you need an inbox, it has to be built.
+
+In React, connect in an effect and always disconnect on cleanup:
+
+```ts
+useEffect(() => {
+  if (!userId) return;
+  const socket = connectNotifications(userId, addToast);
+  return () => { socket.disconnect(); };
+}, [userId]);
+```
+
+---
+
+## 9. Streaming chat (SSE)
+
+`GET /chatbot/sse?prompt=…` streams tokens as `text/event-stream`. `strict-sse` is the same
+contract but answers only from uploaded documents.
+
+`EventSource` is the simplest option — the prompt goes in the query string, so URL-encode it:
+
+```ts
+const source = new EventSource(
+  `${BASE_URL}/chatbot/sse?prompt=${encodeURIComponent(prompt)}`,
+);
+
+let answer = '';
+source.onmessage = (e) => {
+  answer += e.data;
+  render(answer);
+};
+
+// EventSource cannot distinguish "stream finished" from "connection dropped";
+// it just fires onerror and would auto-reconnect — re-running the prompt.
+source.onerror = () => source.close();
+```
+
+`EventSource` sends no custom headers, so these calls carry no `x-request-id`. If you need
+correlation or want to abort mid-stream, use `fetch` with a reader instead:
+
+```ts
+const controller = new AbortController();
+const res = await fetch(`${BASE_URL}/chatbot/sse?prompt=${encodeURIComponent(prompt)}`, {
+  headers: { Accept: 'text/event-stream', 'x-request-id': crypto.randomUUID() },
+  signal: controller.signal,
+});
+
+const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+let buffer = '';
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  buffer += value;
+
+  // SSE frames are separated by a blank line
+  const frames = buffer.split('\n\n');
+  buffer = frames.pop() ?? '';
+  for (const frame of frames) {
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('data:')) append(line.slice(5).trim());
+    }
+  }
+}
+```
+
+Errors before the stream opens arrive as a normal JSON error body with the usual `code`. Once the
+stream is open the status is already `200`, so a mid-stream failure surfaces as the connection
+closing — show a partial answer with a retry affordance rather than an error page.
+
+### Uploading a document
+
+```ts
+const form = new FormData();
+form.append('file', file);          // UTF-8 text; empty file → 400
+form.append('fileName', file.name); // optional
+form.append('chunkSize', '1000');   // optional
+form.append('chunkOverlap', '200'); // optional
+
+// Do NOT set Content-Type — the browser must add the multipart boundary.
+const result = await api<{ documentId: string; fileName: string; chunkCount: number }>(
+  '/chatbot/documents/upload',
+  { method: 'POST', body: form },
+);
+```
+
+---
+
+## 10. Running the backend locally
+
+```bash
+npm install
+docker compose up -d          # Postgres primary + replica, RabbitMQ
+npx prisma migrate deploy
+npx prisma generate
+
+npm run gateway:dev           # :3000  ← the only port a frontend touches
+npm run user:dev              # :3001
+npm run location:dev          # :3002
+npm run payment:dev           # :3003
+npm run chatbot:dev           # :3004
+npm run notification:dev      # :3005
+npm run booking:dev           # :3006
+```
+
+The gateway starts even when a downstream service is down — those routes then fail at call time with
+`502 DEPENDENCY_FAILURE`. Seeing 502s from one resource while the rest work usually means you forgot
+to start that service.
+
+Two ready-made harnesses live in the repo root: `websocket-test-client.html` (Socket.IO) and
+`test-notification-api.html`.
+
+---
+
+## 11. Integration checklist
+
+- [ ] Generate and send `x-request-id` on every request; log it with failures.
+- [ ] Branch on `error.code`, never on `error.message`.
+- [ ] Treat `409` on `POST /bookings` as a normal race — refresh availability, do not auto-retry.
+- [ ] Treat `409 "already confirmed"` as success and refetch.
+- [ ] Send calendar dates as `"YYYY-MM-DD"`, built without `toISOString()`.
+- [ ] Render money as integer VND — no division by 100.
+- [ ] Count nights as `checkOut - checkIn` (half-open range).
+- [ ] Drive the PENDING countdown from `holdExpiresAt`, not from `status`.
+- [ ] Split the emailed cancel link: `GET` renders, `POST` cancels — never cancel on page load.
+- [ ] Pass `auth.userId` on the Socket.IO handshake, and disconnect on unmount.
+- [ ] Show `202` responses as "queued", not "sent".
+- [ ] Close the `EventSource` in `onerror`, or it silently re-runs the prompt.
+- [ ] Remember there is no auth: do not expose admin-shaped routes in a public build.
