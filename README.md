@@ -92,7 +92,7 @@ libs/
 ├── middlewares/  correlation request id
 └── types/        cross-service types
 prisma/           schema, migrations, seed
-docs/             the frontend API contract
+docs/             the frontend API contract + the database reference
 ```
 
 Every service is layered the same way — `presentation/` → `application/` → `domain/` ←

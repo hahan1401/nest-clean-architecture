@@ -2,7 +2,8 @@
 
 The design of the Thong Dong Retreat booking engine. What the system is and how to run it
 is in [`README.md`](./README.md); the client-facing contract is in
-[`docs/frontend-api-integration.md`](./docs/frontend-api-integration.md).
+[`docs/frontend-api-integration.md`](./docs/frontend-api-integration.md); the table-by-table
+schema reference is in [`docs/database.md`](./docs/database.md).
 
 ## High-Level Overview
 
