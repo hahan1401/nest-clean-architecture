@@ -64,6 +64,7 @@ homestay-booking-be/
 │   ├── api-chatbot/      # Chatbot + document ingestion service (TCP)
 │   ├── api-notification/ # Real-time notifications (RabbitMQ consumer + Socket.IO)
 │   ├── api-email/        # Email sender (RabbitMQ consumer -> AWS SES)
+│   ├── api-gmail/        # Email sender (RabbitMQ consumer -> Google Gmail API)
 │   └── api-booking/      # Homestay rooms, tours, availability, bookings (TCP)
 │
 ├── libs/
@@ -103,11 +104,12 @@ homestay-booking-be/
 | `api-payment` | 3003 | TCP | VNPay operations: bank list, QR, payment URL, return verification |
 | `api-chatbot` | 3004 | TCP | Streaming chatbot responses and document upsert/update/delete |
 | `api-notification` | 3005 | RabbitMQ + Socket.IO | Consumes notification events and pushes them to connected clients |
-| `api-email` | — | RabbitMQ | Consumes email events and sends mail via AWS SES |
+| `api-email` | — | RabbitMQ | Consumes `email.send` and sends mail via AWS SES |
+| `api-gmail` | — | RabbitMQ | Consumes `email.send.gmail` and sends mail via the Google Gmail API |
 | `api-booking` | 3006 | TCP (+ RMQ producer) | Rooms, tours, departures, price rules, availability, bookings, daily jobs |
 
-TCP services bootstrap with `NestFactory.createMicroservice`. The two pure RabbitMQ
-consumers (`api-notification`, `api-email`) use `NestFactory.createApplicationContext`
+TCP services bootstrap with `NestFactory.createMicroservice`. The pure RabbitMQ
+consumers (`api-notification`, `api-email`, `api-gmail`) use `NestFactory.createApplicationContext`
 instead — `@golevelup/nestjs-rabbitmq` owns the connection, so there is nothing to
 `listen()` on.
 
@@ -284,7 +286,7 @@ Exports (all re-exported from `libs/common/src/index.ts`):
   `EMAIL_PATTERNS`, `BOOKING_PATTERNS`
 - **Queues and exchanges** (`constants/queues.ts`): `NOTIFICATION_QUEUE`,
   `NOTIFICATION_EXCHANGE`, `NOTIFICATION_BROADCAST_EXCHANGE`,
-  `NOTIFICATION_BROADCAST_QUEUE_PREFIX`, `EMAIL_EXCHANGE`, `EMAIL_QUEUE`,
+  `NOTIFICATION_BROADCAST_QUEUE_PREFIX`, `EMAIL_EXCHANGE`, `EMAIL_QUEUE`, `GMAIL_QUEUE`,
   `RABBITMQ_DEFAULT_URL`
 - **DTOs**: user (`CreateUserDto`, `UpdateUserDto`, `UpdateLocationDto`, response DTOs),
   notification, email (`SendEmailDto`), and booking
@@ -447,11 +449,23 @@ callable as patterns for manual re-runs:
 Each is a single atomic conditional statement, so every replica can run its own cron
 safely — a second concurrent run simply matches zero rows and reports `{ affected: 0 }`.
 
-### Email Service (`api-email`)
+### Email Services (`api-email`, `api-gmail`)
 
-| Pattern | Exchange | Payload | Description |
-|---------|----------|---------|-------------|
-| `email.send` | `emails.topic` | `SendEmailDto` | Sends via AWS SES; `from` falls back to `EMAIL_FROM` |
+Both consume the same `emails.topic` exchange with the same `SendEmailDto`; the routing
+key picks the provider. Each binds its own durable queue, and the keys do not overlap, so
+a message is delivered to exactly one of them.
+
+| Pattern | Exchange | Queue | Description |
+|---------|----------|-------|-------------|
+| `email.send` | `emails.topic` | `emails_queue` | `api-email` — sends via AWS SES; `from` falls back to `EMAIL_FROM` |
+| `email.send.gmail` | `emails.topic` | `gmail_emails_queue` | `api-gmail` — sends via the Gmail API (`users.messages.send`); `from` falls back to `GMAIL_SENDER`, then `EMAIL_FROM` |
+
+`api-gmail` authenticates with an OAuth2 refresh token, caching each access token until a
+minute before it expires and refreshing once on a `401`. It builds the RFC 5322 message
+itself: `multipart/alternative` when both `text` and `html` are present, RFC 2047 encoded
+subjects for Vietnamese diacritics, base64 bodies. `configurationSetName` is SES-specific
+and ignored. Gmail accepts only the authenticated mailbox or one of its verified
+"send as" aliases as `from`.
 
 ### Notification Service (`api-notification`)
 
@@ -534,6 +548,7 @@ reachable over TCP only.
 | `POST` | `/notifications` | `notification.send` (RabbitMQ event, 202) |
 | `POST` | `/notifications/broadcast` | `notification.broadcast` (RabbitMQ event, 202) |
 | `POST` | `/emails` | `email.send` (RabbitMQ event, 202) |
+| `POST` | `/emails/gmail` | `email.send.gmail` (RabbitMQ event, 202) |
 
 ### Booking Endpoints
 
@@ -746,6 +761,7 @@ npm run chatbot:dev
 npm run booking:dev
 npm run notification:dev
 npm run email:dev
+npm run gmail:dev
 
 # Build individual apps
 npm run build:gateway
@@ -756,6 +772,7 @@ npm run build:chatbot
 npm run build:booking
 npm run build:notification
 npm run build:email
+npm run build:gmail
 
 # Unit tests (specs are co-located as *.spec.ts under apps/ and libs/)
 npm test
@@ -792,7 +809,7 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 | `BOOKING_SERVICE_HOST` | `localhost` | api-gateway |
 | `BOOKING_SERVICE_PORT` | `3006` | api-gateway, api-booking |
 | `HOST_NAME` | (required in current user->location client config) | api-user |
-| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672` | api-gateway, api-notification, api-email, api-booking |
+| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672` | api-gateway, api-notification, api-email, api-gmail, api-booking |
 | `NOTIFICATION_QUEUE` | `notifications_queue` | api-gateway, api-notification |
 | `DATABASE_URL` | - | services using `@app/database` |
 | `DATABASE_REPLICA_URLS` | empty (primary serves reads) | services using `@app/database` |
@@ -805,9 +822,18 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 | `GEMINI_API_KEY` | - | api-chatbot |
 | `EMAIL_FROM` | - (required) | api-email (fallback sender; api-booking leaves `from` unset) |
 | `AWS_SES_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | - | api-email |
+| `GMAIL_QUEUE` | `gmail_emails_queue` | api-gmail |
+| `GMAIL_SENDER` | - (falls back to `EMAIL_FROM`) | api-gmail (must be the authenticated mailbox or a verified alias) |
+| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` | - (all required) | api-gmail (service refuses to boot without them) |
+
+`GMAIL_REFRESH_TOKEN` is minted once per mailbox by
+`node apps/api-gmail/scripts/get-refresh-token.js`, which runs the consent flow on a
+loopback port and prints the token. The OAuth consent screen must be **published to
+Production** — refresh tokens issued while it sits in *Testing* expire after 7 days.
 | `HOMESTAY_OWNER_EMAIL` | - (required) | api-booking |
 | `PUBLIC_BASE_URL` | `http://localhost:4000` | api-booking (builds the emailed cancel link; must be the **frontend** origin, not the gateway) |
 | `EMAIL_EMIT_TIMEOUT_MS` | `2000` | api-booking |
+| `EMAIL_PROVIDER` | `ses` (`ses` \| `gmail`) | api-booking (picks the routing key for booking emails; an unknown value fails at boot) |
 | `BOOKING_HOLD_TTL_MINUTES` | `30` | api-booking |
 | `HOLD_SWEEP_CRON` | `*/10 * * * *` | api-booking |
 | `DAILY_MAINTENANCE_CRON` | `5 0 * * *` | api-booking |

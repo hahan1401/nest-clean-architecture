@@ -20,4 +20,18 @@ export class EmailController {
 
     return { queued: true, requestId: req.requestId };
   }
+
+  /** Same exchange, different routing key: api-gmail delivers through the Gmail API. */
+  @Post('gmail')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async sendViaGmail(@Req() req: CorrelatedRequest, @Body() dto: SendEmailDto) {
+    await lastValueFrom(
+      this.emailClient.emit(EMAIL_PATTERNS.SEND_GMAIL, {
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
+
+    return { queued: true, provider: 'gmail', requestId: req.requestId };
+  }
 }

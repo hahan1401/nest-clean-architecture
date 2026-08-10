@@ -84,7 +84,8 @@ apps/
 ├── api-payment/       :3003  VNPay
 ├── api-chatbot/       :3004  streaming answers + document ingestion
 ├── api-notification/  :3005  RabbitMQ consumer → Socket.IO
-├── api-email/            —   RabbitMQ consumer → AWS SES
+├── api-email/            —   RabbitMQ consumer (`email.send`) → AWS SES
+├── api-gmail/            —   RabbitMQ consumer (`email.send.gmail`) → Google Gmail API
 └── api-booking/       :3006  rooms, tours, departures, price rules, bookings, cron jobs
 libs/
 ├── common/       service tokens, message patterns, DTOs, error model, filters, logging

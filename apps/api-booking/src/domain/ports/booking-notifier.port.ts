@@ -16,28 +16,54 @@ export interface BookingNotificationBase {
 }
 
 /**
- * A discriminated union rather than one interface with optional fields, so the
- * templates narrow without non-null assertions (which eslint bans here).
+ * What was booked. A discriminated union rather than one interface with optional
+ * fields, so the templates narrow without non-null assertions (which eslint bans
+ * here). Shared by every notification, since "what was booked" does not change
+ * with the reason for writing.
  */
-export type BookingConfirmedNotification =
-  | (BookingNotificationBase & {
+export type BookingSubject =
+  | {
       type: 'ROOM';
       roomName: string;
       checkIn: Date;
       checkOut: Date;
       nights: number;
       guests: number;
-    })
-  | (BookingNotificationBase & {
+    }
+  | {
       type: 'TOUR';
       tourName: string;
       departureDate: Date;
       seats: number;
-    });
+    };
+
+export type BookingConfirmedNotification = BookingNotificationBase &
+  BookingSubject & {
+    /**
+     * The guest's own requests, straight from the booking. Not on the cancelled
+     * notification: markCancelled overwrites `notes` with the cancellation
+     * reason, so the field no longer means "what the guest asked for".
+     */
+    notes: string | null;
+  };
 
 /**
- * Outbound port: announces a confirmed booking to the homestay owner and to the
- * customer.
+ * Cancellation drops `cancelUrl` (the token is spent) and `confirmedAt` (a
+ * PENDING hold can be cancelled before it was ever confirmed).
+ */
+export type BookingCancelledNotification = Omit<
+  BookingNotificationBase,
+  'cancelUrl' | 'confirmedAt'
+> & {
+  cancelledAt: Date;
+  reason: string | null;
+  /** Which path cancelled it, so the owner mail can say who acted. */
+  cancelledBy: 'customer' | 'owner';
+} & BookingSubject;
+
+/**
+ * Outbound port: announces booking lifecycle events to the homestay owner and to
+ * the customer.
  *
  * Contract - read before implementing:
  *  - Delivery is BEST EFFORT. Implementations MUST resolve even when the
@@ -49,4 +75,7 @@ export type BookingConfirmedNotification =
  */
 export abstract class BookingNotifierPort {
   abstract notifyBookingConfirmed(notification: BookingConfirmedNotification): Promise<void>;
+
+  /** Same best-effort contract: a cancellation is committed whether or not the mail goes out. */
+  abstract notifyBookingCancelled(notification: BookingCancelledNotification): Promise<void>;
 }

@@ -2,7 +2,12 @@ import { ConflictError, NotFoundError } from '@app/common';
 import { Booking, BookingStatus } from '@app/database';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
-import { todayUtc } from '../../domain/models/date-range';
+import type { BookingDetail } from '../../domain/models/booking-detail';
+import { nightCount, todayUtc } from '../../domain/models/date-range';
+import {
+  BookingCancelledNotification,
+  BookingNotifierPort,
+} from '../../domain/ports/booking-notifier.port';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import {
   CancelBookingByTokenInput,
@@ -19,6 +24,55 @@ import {
 const hasStarted = (booking: Booking, today: Date): boolean => {
   const start = booking.type === 'ROOM' ? booking.checkIn : null;
   return start != null && start <= today;
+};
+
+/**
+ * Both cancel paths build the same announcement. `detail` is optional because the
+ * labels are cosmetic: a missing lookup degrades "Garden Room" to "Room" rather
+ * than costing the guest their cancellation email.
+ */
+const toCancelledNotification = (
+  cancelled: Booking,
+  detail: BookingDetail | null,
+  cancelledBy: 'customer' | 'owner',
+  // Passed in rather than read back off the row: markCancelled stores the reason
+  // in `notes`, which otherwise holds the guest's own booking notes.
+  reason: string | null,
+  requestId?: string,
+): BookingCancelledNotification => {
+  const base = {
+    bookingId: cancelled.id,
+    reference: cancelled.reference,
+    customerName: cancelled.customerName,
+    customerEmail: cancelled.customerEmail,
+    customerPhone: cancelled.customerPhone,
+    totalAmount: cancelled.totalAmount,
+    currency: cancelled.currency,
+    cancelledAt: cancelled.cancelledAt ?? new Date(),
+    reason,
+    cancelledBy,
+    requestId,
+  };
+
+  if (cancelled.type === 'ROOM' && cancelled.checkIn && cancelled.checkOut) {
+    return {
+      ...base,
+      type: 'ROOM',
+      roomName: detail?.roomName ?? 'Room',
+      checkIn: cancelled.checkIn,
+      checkOut: cancelled.checkOut,
+      nights: nightCount({ from: cancelled.checkIn, to: cancelled.checkOut }),
+      guests: cancelled.guests,
+    };
+  }
+
+  return {
+    ...base,
+    type: 'TOUR',
+    tourName: detail?.tourName ?? 'Tour',
+    departureDate: detail?.departureDate ?? cancelled.createdAt,
+    seats: cancelled.seats ?? cancelled.guests,
+  };
 };
 
 const assertCancellable = (booking: Booking, today: Date): void => {
@@ -41,23 +95,25 @@ const assertCancellable = (booking: Booking, today: Date): void => {
 export class CancelBookingService implements CancelBookingUseCase {
   constructor(
     private readonly bookingRepository: BookingRepository,
+    private readonly notifier: BookingNotifierPort,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(CancelBookingService.name);
   }
 
   async execute(input: CancelBookingInput): Promise<Booking> {
-    const booking = await this.bookingRepository.findById(input.bookingId);
-    if (!booking) {
+    // findDetailedById rather than findById: same single query, and it carries the
+    // room/tour labels the cancellation emails need.
+    const detail = await this.bookingRepository.findDetailedById(input.bookingId);
+    if (!detail) {
       throw new NotFoundError(`Booking with id ${input.bookingId} not found`);
     }
+
+    const { booking } = detail;
     assertCancellable(booking, todayUtc());
 
-    const cancelled = await this.bookingRepository.markCancelled(
-      booking.id,
-      new Date(),
-      input.reason ?? null,
-    );
+    const reason = input.reason ?? null;
+    const cancelled = await this.bookingRepository.markCancelled(booking.id, new Date(), reason);
     if (!cancelled) {
       throw new ConflictError(`Booking ${booking.reference} is no longer cancellable`);
     }
@@ -66,7 +122,30 @@ export class CancelBookingService implements CancelBookingUseCase {
       { bookingId: cancelled.id, reference: cancelled.reference },
       'Booking cancelled',
     );
+
+    await this.announce(cancelled, detail, 'owner', reason, input.requestId);
+
     return cancelled;
+  }
+
+  /** Mirrors ConfirmBookingService: the transition is committed, so this can only log. */
+  private async announce(
+    cancelled: Booking,
+    detail: BookingDetail | null,
+    cancelledBy: 'customer' | 'owner',
+    reason: string | null,
+    requestId?: string,
+  ): Promise<void> {
+    await this.notifier
+      .notifyBookingCancelled(
+        toCancelledNotification(cancelled, detail, cancelledBy, reason, requestId),
+      )
+      .catch((error: unknown) => {
+        this.logger.error(
+          { err: error, bookingId: cancelled.id, reference: cancelled.reference },
+          'Booking cancelled but the announcement could not be sent',
+        );
+      });
   }
 }
 
@@ -94,6 +173,7 @@ export class GetBookingByCancellationTokenService implements GetBookingByCancell
 export class CancelBookingByTokenService implements CancelBookingByTokenUseCase {
   constructor(
     private readonly bookingRepository: BookingRepository,
+    private readonly notifier: BookingNotifierPort,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(CancelBookingByTokenService.name);
@@ -106,12 +186,19 @@ export class CancelBookingByTokenService implements CancelBookingByTokenUseCase 
     }
     assertCancellable(booking, todayUtc());
 
+    // Two different values on purpose. The stored one is an audit trail and always
+    // says something; the displayed one is only what the guest actually typed, so
+    // the emails do not report "Reason: Cancelled by customer" next to a
+    // "Cancelled by: Guest" row.
+    const storedReason = input.reason ?? 'Cancelled by customer';
+    const statedReason = input.reason?.trim() || null;
+
     // Delegates to the same conditional transition as the admin path, so seat
     // release and idempotency behave identically however the cancel arrived.
     const cancelled = await this.bookingRepository.markCancelled(
       booking.id,
       new Date(),
-      input.reason ?? 'Cancelled by customer',
+      storedReason,
     );
     if (!cancelled) {
       throw new ConflictError(`Booking ${booking.reference} is no longer cancellable`);
@@ -121,6 +208,23 @@ export class CancelBookingByTokenService implements CancelBookingByTokenUseCase 
       { bookingId: cancelled.id, reference: cancelled.reference },
       'Booking cancelled by customer link',
     );
+
+    // The token lookup returns a bare Booking, so the labels come from a second
+    // read. It is not worth failing the announcement over: a null detail only
+    // costs the email its room/tour name.
+    const detail = await this.bookingRepository.findDetailedById(cancelled.id).catch(() => null);
+
+    await this.notifier
+      .notifyBookingCancelled(
+        toCancelledNotification(cancelled, detail, 'customer', statedReason, input.requestId),
+      )
+      .catch((error: unknown) => {
+        this.logger.error(
+          { err: error, bookingId: cancelled.id, reference: cancelled.reference },
+          'Booking cancelled but the announcement could not be sent',
+        );
+      });
+
     return cancelled;
   }
 }

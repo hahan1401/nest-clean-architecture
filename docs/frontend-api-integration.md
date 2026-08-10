@@ -545,6 +545,7 @@ These publish to RabbitMQ and return immediately. **`202 Accepted` means queued,
 | `POST` | `/notifications` | `{ userId, title, message, type?, data? }` | `202` `{ queued: true, requestId }` |
 | `POST` | `/notifications/broadcast` | `{ title, message, type?, data? }` | `202` `{ queued: true, requestId }` |
 | `POST` | `/emails` | `SendEmailDto` | `202` `{ queued: true, requestId }` |
+| `POST` | `/emails/gmail` | `SendEmailDto` | `202` `{ queued: true, provider: 'gmail', requestId }` — same payload, delivered through the Gmail API instead of SES |
 
 `type` is one of `'info' | 'success' | 'warning' | 'error'`. `title` ≤120, `message` ≤1000.
 

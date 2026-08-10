@@ -5,16 +5,25 @@ import { ClientProxy } from '@nestjs/microservices';
 import { PinoLogger } from 'nestjs-pino';
 import { lastValueFrom, timeout } from 'rxjs';
 import {
+  BookingCancelledNotification,
   BookingConfirmedNotification,
   BookingNotifierPort,
 } from '../../domain/ports/booking-notifier.port';
 import {
   BookingEmailContent,
+  customerBookingCancelledEmail,
   customerBookingConfirmedEmail,
+  ownerBookingCancelledEmail,
   ownerBookingConfirmedEmail,
 } from '../templates/booking-emails';
 
 const DEFAULT_EMIT_TIMEOUT_MS = 2_000;
+
+/** Which mailer consumes these events; the routing key is the only difference. */
+const EMAIL_ROUTING_KEY_BY_PROVIDER: Record<string, string> = {
+  ses: EMAIL_PATTERNS.SEND,
+  gmail: EMAIL_PATTERNS.SEND_GMAIL,
+};
 
 @Injectable()
 export class RmqBookingNotifierService
@@ -23,6 +32,8 @@ export class RmqBookingNotifierService
 {
   private readonly ownerEmail: string;
   private readonly emitTimeoutMs: number;
+  /** Resolved once from EMAIL_PROVIDER; changing it needs a restart, not just an env edit. */
+  private readonly emailRoutingKey: string;
 
   constructor(
     @Inject(EMAIL_SERVICE) private readonly emailClient: ClientProxy,
@@ -36,6 +47,23 @@ export class RmqBookingNotifierService
     this.ownerEmail = this.configService.getOrThrow<string>('HOMESTAY_OWNER_EMAIL');
     this.emitTimeoutMs =
       Number(this.configService.get<number>('EMAIL_EMIT_TIMEOUT_MS')) || DEFAULT_EMIT_TIMEOUT_MS;
+
+    // An unknown provider would publish to a routing key nothing consumes, and the
+    // messages would vanish silently on the exchange. Fail at boot instead.
+    const provider = (this.configService.get<string>('EMAIL_PROVIDER') || 'ses')
+      .trim()
+      .toLowerCase();
+    const routingKey = EMAIL_ROUTING_KEY_BY_PROVIDER[provider];
+
+    if (!routingKey) {
+      throw new Error(
+        `Unknown EMAIL_PROVIDER "${provider}", expected one of: ${Object.keys(
+          EMAIL_ROUTING_KEY_BY_PROVIDER,
+        ).join(', ')}`,
+      );
+    }
+
+    this.emailRoutingKey = routingKey;
   }
 
   /**
@@ -74,15 +102,28 @@ export class RmqBookingNotifierService
     ]);
   }
 
+  async notifyBookingCancelled(notification: BookingCancelledNotification): Promise<void> {
+    const owner = ownerBookingCancelledEmail(notification);
+    const customer = customerBookingCancelledEmail(notification);
+
+    await Promise.all([
+      this.queue('owner', notification, [this.ownerEmail], owner),
+      this.queue('customer', notification, [notification.customerEmail], customer, [
+        this.ownerEmail,
+      ]),
+    ]);
+  }
+
   private async queue(
     recipient: 'owner' | 'customer',
-    notification: BookingConfirmedNotification,
+    notification: BookingConfirmedNotification | BookingCancelledNotification,
     to: string[],
     content: BookingEmailContent,
     replyTo?: string[],
   ): Promise<void> {
-    // `from` is left unset on purpose: api-email falls back to EMAIL_FROM, which
-    // keeps the verified SES identity configured in exactly one place.
+    // `from` is left unset on purpose: the mailer falls back to its own sender
+    // (EMAIL_FROM for api-email, GMAIL_SENDER for api-gmail), so the verified
+    // identity stays configured in exactly one place per provider.
     const payload: SendEmailDto = {
       to,
       replyTo,
@@ -107,7 +148,7 @@ export class RmqBookingNotifierService
       // never gets a response.
       await lastValueFrom(
         this.emailClient
-          .emit(EMAIL_PATTERNS.SEND, payload)
+          .emit(this.emailRoutingKey, payload)
           .pipe(timeout({ each: this.emitTimeoutMs })),
       );
       this.logger.info(context, 'Booking confirmation email queued');

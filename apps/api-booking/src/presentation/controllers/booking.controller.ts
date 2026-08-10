@@ -111,11 +111,12 @@ export class BookingController {
 
   @MessagePattern(BOOKING_PATTERNS.CANCEL_BOOKING)
   async cancel(
-    @Payload() data: { bookingId: number; reason?: string },
+    @Payload() data: { bookingId: number; reason?: string; requestId?: string },
   ): Promise<BookingResponseDto> {
     const booking = await this.cancelBookingService.execute({
       bookingId: data.bookingId,
       reason: data.reason ?? null,
+      requestId: data.requestId,
     });
     return new BookingResponseDto(booking);
   }
@@ -143,11 +144,12 @@ export class BookingController {
 
   @MessagePattern(BOOKING_PATTERNS.CANCEL_BOOKING_BY_TOKEN)
   async cancelByToken(
-    @Payload() data: { token: string; reason?: string },
+    @Payload() data: { token: string; reason?: string; requestId?: string },
   ): Promise<BookingResponseDto> {
     const booking = await this.cancelBookingByTokenService.execute({
       token: data.token,
       reason: data.reason ?? null,
+      requestId: data.requestId,
     });
     return new BookingResponseDto(booking);
   }

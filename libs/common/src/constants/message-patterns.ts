@@ -33,9 +33,12 @@ export const NOTIFICATION_PATTERNS = {
   BROADCAST: 'notification.broadcast',
 } as const;
 
-/** RabbitMQ event patterns consumed by api-email. */
+/** RabbitMQ event patterns for email delivery; the key picks the provider. */
 export const EMAIL_PATTERNS = {
+  /** Consumed by api-email (AWS SES). */
   SEND: 'email.send',
+  /** Consumed by api-gmail (Google Gmail API). */
+  SEND_GMAIL: 'email.send.gmail',
 } as const;
 
 export const BOOKING_PATTERNS = {

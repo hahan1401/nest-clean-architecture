@@ -29,6 +29,7 @@ export interface ConfirmBookingUseCase {
 export interface CancelBookingInput {
   bookingId: number;
   reason?: string | null;
+  requestId?: string;
 }
 
 export interface CancelBookingUseCase {
@@ -51,6 +52,7 @@ export interface GetBookingByCancellationTokenUseCase {
 export interface CancelBookingByTokenInput {
   token: string;
   reason?: string | null;
+  requestId?: string;
 }
 
 export interface CancelBookingByTokenUseCase {

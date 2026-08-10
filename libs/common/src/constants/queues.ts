@@ -11,4 +11,7 @@ export const NOTIFICATION_BROADCAST_QUEUE_PREFIX = 'notifications.broadcast';
 export const EMAIL_EXCHANGE = 'emails.topic';
 export const EMAIL_QUEUE = 'emails_queue';
 
+/** api-gmail binds its own queue to the same exchange so SES traffic is untouched. */
+export const GMAIL_QUEUE = 'gmail_emails_queue';
+
 export const RABBITMQ_DEFAULT_URL = 'amqp://guest:guest@localhost:5672';

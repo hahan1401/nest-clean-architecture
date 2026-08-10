@@ -90,6 +90,7 @@ export class ConfirmBookingService implements ConfirmBookingUseCase {
       currency: confirmed.currency,
       confirmedAt: confirmed.confirmedAt ?? new Date(),
       cancelUrl: `${this.publicBaseUrl}/bookings/cancel/${confirmed.cancellationToken}`,
+      notes: confirmed.notes ?? null,
       requestId,
     };
 
