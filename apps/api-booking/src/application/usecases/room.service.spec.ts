@@ -76,7 +76,6 @@ describe('SearchAvailableRoomsService', () => {
     const [result] = await service.execute({ range: RANGE });
 
     expect(result.state).toBe('AVAILABLE');
-    expect(result.available).toBe(true);
     expect(result.heldUntil).toBeNull();
   });
 
@@ -89,7 +88,6 @@ describe('SearchAvailableRoomsService', () => {
 
     // The whole point: the guest sees the room exists and can come back for it.
     expect(result.state).toBe('ON_HOLD');
-    expect(result.available).toBe(false);
     expect(result.heldUntil).toEqual(HELD_UNTIL);
   });
 
@@ -133,7 +131,7 @@ describe('CheckRoomAvailabilityService', () => {
 
     const result = await service.execute({ roomId: 1, range: RANGE });
 
-    expect(result.available).toBe(true);
+    expect(result.state).toBe('AVAILABLE');
     expect(result.quote).not.toBeNull();
   });
 
@@ -146,7 +144,6 @@ describe('CheckRoomAvailabilityService', () => {
     const result = await service.execute({ roomId: 1, range: RANGE });
 
     expect(result.state).toBe('ON_HOLD');
-    expect(result.available).toBe(false);
     expect(result.heldUntil).toEqual(HELD_UNTIL);
     expect(result.quote).not.toBeNull();
   });

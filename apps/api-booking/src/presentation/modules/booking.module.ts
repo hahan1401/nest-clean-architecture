@@ -1,5 +1,13 @@
-import { EMAIL_EXCHANGE, EMAIL_SERVICE, RABBITMQ_DEFAULT_URL } from '@app/common';
+import {
+  BOOKING_EXCHANGE,
+  BOOKING_HOLD_DELAY_QUEUE,
+  BOOKING_HOLD_PATTERNS,
+  EMAIL_EXCHANGE,
+  EMAIL_SERVICE,
+  RABBITMQ_DEFAULT_URL,
+} from '@app/common';
 import { DatabaseModule } from '@app/database';
+import { MessageHandlerErrorBehavior, RabbitMQModule } from '@golevelup/nestjs-rabbitmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
@@ -18,7 +26,7 @@ import {
 import {
   CloseElapsedDeparturesService,
   CompleteElapsedBookingsService,
-  ExpireStaleHoldsService,
+  ExpireBookingHoldService,
 } from '../../application/usecases/maintenance.service';
 import {
   CreatePriceRuleService,
@@ -63,7 +71,10 @@ import { PrismaRoomRepository } from '../../infrastructure/repositories/prisma-r
 import { PrismaTourDepartureRepository } from '../../infrastructure/repositories/prisma-tour-departure.repository';
 import { PrismaTourRepository } from '../../infrastructure/repositories/prisma-tour.repository';
 
+import { BookingHoldSchedulerPort } from '../../domain/ports/booking-hold-scheduler.port';
+import { RmqBookingHoldScheduler } from '../../infrastructure/schedulers/rmq-booking-hold.scheduler';
 import { BookingController } from '../controllers/booking.controller';
+import { BookingHoldController } from '../controllers/booking-hold.controller';
 import { RoomController } from '../controllers/room.controller';
 import { TourController } from '../controllers/tour.controller';
 import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.scheduler';
@@ -72,6 +83,40 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
   imports: [
     ConfigModule,
     DatabaseModule,
+    RabbitMQModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        uri: configService.get<string>('RABBITMQ_URL') ?? RABBITMQ_DEFAULT_URL,
+        exchanges: [{ name: BOOKING_EXCHANGE, type: 'topic' }],
+        queues: [
+          {
+            // The delay itself. Nothing consumes this queue: a message waits out
+            // its per-message `expiration` here, and the broker then dead-letters
+            // it to BOOKING_HOLD_PATTERNS.EXPIRE, where the subscriber is.
+            //
+            // Per-message TTL is only evaluated at the head of the queue, so this
+            // is exact only while every message carries the same delay - which is
+            // the case, because every hold uses BOOKING_HOLD_TTL_MINUTES. Raise
+            // that value and messages already queued keep the old, longer wait
+            // ahead of the new ones; the reconciliation sweep covers the gap.
+            name: BOOKING_HOLD_DELAY_QUEUE,
+            exchange: BOOKING_EXCHANGE,
+            routingKey: BOOKING_HOLD_PATTERNS.SCHEDULED,
+            createQueueIfNotExists: true,
+            options: {
+              durable: true,
+              arguments: {
+                'x-dead-letter-exchange': BOOKING_EXCHANGE,
+                'x-dead-letter-routing-key': BOOKING_HOLD_PATTERNS.EXPIRE,
+              },
+            },
+          },
+        ],
+        defaultSubscribeErrorBehavior: MessageHandlerErrorBehavior.NACK,
+        enableControllerDiscovery: true,
+      }),
+    }),
     ClientsModule.registerAsync([
       {
         name: EMAIL_SERVICE,
@@ -96,7 +141,7 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
       },
     ]),
   ],
-  controllers: [RoomController, TourController, BookingController],
+  controllers: [RoomController, TourController, BookingController, BookingHoldController],
   providers: [
     // Ports -> implementations
     { provide: RoomRepository, useClass: PrismaRoomRepository },
@@ -106,6 +151,7 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
     { provide: BookingRepository, useClass: PrismaBookingRepository },
     { provide: PricingPort, useClass: PriceRulePricingService },
     { provide: BookingNotifierPort, useClass: RmqBookingNotifierService },
+    { provide: BookingHoldSchedulerPort, useClass: RmqBookingHoldScheduler },
 
     // Rooms
     CreateRoomService,
@@ -143,7 +189,7 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
     CancelBookingByTokenService,
 
     // Maintenance
-    ExpireStaleHoldsService,
+    ExpireBookingHoldService,
     CloseElapsedDeparturesService,
     CompleteElapsedBookingsService,
     BookingMaintenanceScheduler,

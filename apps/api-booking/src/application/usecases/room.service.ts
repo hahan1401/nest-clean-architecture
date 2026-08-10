@@ -104,7 +104,6 @@ export class SearchAvailableRoomsService implements SearchAvailableRoomsUseCase 
     return Promise.all(
       offers.map(async (offer) => ({
         room: offer.room,
-        available: !offer.held,
         state: offer.held ? ('ON_HOLD' as const) : ('AVAILABLE' as const),
         heldUntil: offer.heldUntil,
         quote: await this.pricing.quoteRoomStay(offer.room, input.range),
@@ -138,7 +137,7 @@ export class CheckRoomAvailabilityService implements CheckRoomAvailabilityUseCas
     // pricing, because the guest may come back for it.
     const quote = state === 'BOOKED' ? null : await this.pricing.quoteRoomStay(room, input.range);
 
-    return { room, available: state === 'AVAILABLE', state, heldUntil, quote };
+    return { room, state, heldUntil, quote };
   }
 }
 

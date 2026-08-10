@@ -256,12 +256,3 @@ export class BookingResponseDto {
       : null;
   }
 }
-
-/** Row count returned by each daily maintenance job. */
-export class MaintenanceResultDto {
-  affected: number;
-
-  constructor(affected: number) {
-    this.affected = affected;
-  }
-}

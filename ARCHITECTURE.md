@@ -287,6 +287,7 @@ Exports (all re-exported from `libs/common/src/index.ts`):
 - **Queues and exchanges** (`constants/queues.ts`): `NOTIFICATION_QUEUE`,
   `NOTIFICATION_EXCHANGE`, `NOTIFICATION_BROADCAST_EXCHANGE`,
   `NOTIFICATION_BROADCAST_QUEUE_PREFIX`, `EMAIL_EXCHANGE`, `EMAIL_QUEUE`, `GMAIL_QUEUE`,
+  `BOOKING_EXCHANGE`, `BOOKING_HOLD_DELAY_QUEUE`, `BOOKING_HOLD_EXPIRY_QUEUE`,
   `RABBITMQ_DEFAULT_URL`
 - **DTOs**: user (`CreateUserDto`, `UpdateUserDto`, `UpdateLocationDto`, response DTOs),
   notification, email (`SendEmailDto`), and booking
@@ -437,17 +438,69 @@ Bookings and self-service cancellation:
 | `get_booking_by_cancellation_token` | `{ token }` | **Read-only** lookup behind the emailed link |
 | `cancel_booking_by_token` | `{ token, reason? }` | Customer-side cancellation |
 
-Maintenance jobs, driven by `BookingMaintenanceScheduler` (`@nestjs/schedule`) and also
-callable as patterns for manual re-runs:
+Maintenance jobs, driven only by `BookingMaintenanceScheduler` (`@nestjs/schedule`).
+They are not exposed as message patterns: nothing could reach them (the gateway has no
+route) and unreachable RPC surface is worse than none.
 
-| Pattern | Schedule | Effect |
-|---------|----------|--------|
-| `expire_stale_holds` | `HOLD_SWEEP_CRON` | `PENDING` past its hold → `EXPIRED`, returning its seats |
-| `close_elapsed_departures` | `DAILY_MAINTENANCE_CRON` | past `OPEN` departures → `CLOSED` |
-| `complete_elapsed_bookings` | `DAILY_MAINTENANCE_CRON` | elapsed `CONFIRMED` → `COMPLETED` |
+| Job | Schedule | Effect |
+|-----|----------|--------|
+| `CloseElapsedDeparturesService` | `DAILY_MAINTENANCE_CRON` | past `OPEN` departures → `CLOSED` |
+| `CompleteElapsedBookingsService` | `DAILY_MAINTENANCE_CRON` | elapsed `CONFIRMED` → `COMPLETED` |
 
 Each is a single atomic conditional statement, so every replica can run its own cron
 safely — a second concurrent run simply matches zero rows and reports `{ affected: 0 }`.
+
+### Hold expiry (`bookings.topic`)
+
+Holds are released by one delayed message per booking, published the moment the hold
+starts, not by a poll that runs whether or not anything has lapsed.
+
+RabbitMQ has no native per-message delay and this broker does not carry
+`rabbitmq_delayed_message_exchange`, so the delay is the standard dead-letter trick:
+
+```
+create booking (PENDING)
+      │  publish, expiration = holdExpiresAt - now
+      ▼
+bookings.topic ──booking.hold.scheduled──> booking_hold_delay_queue   (no consumer)
+                                                  │  message TTL lapses
+                                                  ▼  broker dead-letters it
+bookings.topic ──booking.hold.expire────> booking_hold_expiry_queue  ──> api-booking
+```
+
+| Queue | Consumed | Role |
+|-------|----------|------|
+| `booking_hold_delay_queue` | never | The waiting room. Its `x-dead-letter-*` arguments point back at the exchange with the expiry routing key |
+| `booking_hold_expiry_queue` | `BookingHoldController` | Runs `expireHold(bookingId, now)` |
+
+Two properties make this safe:
+
+- **The message is a prompt, not permission.** `expireHold` re-checks `status = 'PENDING'`
+  and `hold_expires_at <= now` in the same statement that flips the row, so a booking
+  confirmed a second before the message lands survives, and a redelivery is a no-op.
+- **Publishing is best effort.** `BookingHoldSchedulerPort` must never throw: the booking is
+  already committed, and losing a sale to a broker hiccup would be worse than a late
+  release.
+
+There is no longer a periodic sweep behind this. That makes one failure mode worth naming:
+if the publish fails — broker down at create time, delay queue purged — **nothing else will
+ever release that hold**, because `SLOT_HOLDING_STATUSES` counts `PENDING` and no query
+consults `hold_expires_at`. The room stays blocked until someone intervenes. The publish
+failure is logged at `error` by `RmqBookingHoldScheduler`; alert on it.
+
+Two ways to close that hole if it ever bites, in preference order:
+
+1. Make availability ignore lapsed holds, so the system is self-correcting rather than
+   dependent on a message arriving. That means teaching the availability queries about
+   `hold_expires_at` **and** changing the `bookings_room_no_overlap` predicate in lockstep —
+   a migration, not a config change, and the two must never disagree.
+2. Reinstate a low-frequency reconciliation sweep over `PENDING` rows past their hold.
+
+One caveat worth knowing: RabbitMQ only evaluates a per-message TTL at the **head** of the
+queue. Every hold uses the same `BOOKING_HOLD_TTL_MINUTES`, so queue order is expiry order
+and the delay is exact. Raise that value and messages already queued keep the older, longer
+wait ahead of newer ones, which delays those releases. If holds ever need per-booking
+durations, install the delayed-message plugin instead of stretching this.
 
 ### Email Services (`api-email`, `api-gmail`)
 
@@ -834,8 +887,8 @@ Production** — refresh tokens issued while it sits in *Testing* expire after 7
 | `PUBLIC_BASE_URL` | `http://localhost:4000` | api-booking (builds the emailed cancel link; must be the **frontend** origin, not the gateway) |
 | `EMAIL_EMIT_TIMEOUT_MS` | `2000` | api-booking |
 | `EMAIL_PROVIDER` | `ses` (`ses` \| `gmail`) | api-booking (picks the routing key for booking emails; an unknown value fails at boot) |
+| `BOOKING_HOLD_EXPIRY_QUEUE` | `booking_hold_expiry_queue` | api-booking |
 | `BOOKING_HOLD_TTL_MINUTES` | `3` | api-booking |
-| `HOLD_SWEEP_CRON` | `* * * * *` | api-booking |
 | `DAILY_MAINTENANCE_CRON` | `5 0 * * *` | api-booking |
 | `vnp_HashSecret` / `vnp_TmnCode` | - | api-payment |
 | `VNPAY_RETURN_URL` / `VNPAY_IP_ADDR` | optional | api-payment |

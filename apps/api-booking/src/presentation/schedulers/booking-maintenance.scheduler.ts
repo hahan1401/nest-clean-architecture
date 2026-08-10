@@ -5,17 +5,14 @@ import { PinoLogger } from 'nestjs-pino';
 import {
   CloseElapsedDeparturesService,
   CompleteElapsedBookingsService,
-  ExpireStaleHoldsService,
 } from '../../application/usecases/maintenance.service';
 
 /**
- * Every minute, not every ten. A PENDING booking keeps holding its slot until
- * this sweep flips it to EXPIRED - SLOT_HOLDING_STATUSES includes PENDING, and
- * availability never looks at hold_expires_at - so the sweep interval is added
- * to every hold. At a 3 minute TTL, a ten minute sweep would block the room for
- * up to thirteen.
+ * Hold expiry is not here: a delayed message published when the booking is
+ * created releases each hold at its own deadline (see RmqBookingHoldScheduler
+ * and BookingHoldController). These two remain because they are genuinely
+ * date-driven - nothing happens at booking time that could schedule them.
  */
-const DEFAULT_HOLD_SWEEP_CRON = '* * * * *';
 const DEFAULT_DAILY_MAINTENANCE_CRON = '5 0 * * *';
 
 /**
@@ -31,22 +28,12 @@ const DEFAULT_DAILY_MAINTENANCE_CRON = '5 0 * * *';
 @Injectable()
 export class BookingMaintenanceScheduler {
   constructor(
-    private readonly expireStaleHoldsService: ExpireStaleHoldsService,
     private readonly closeElapsedDeparturesService: CloseElapsedDeparturesService,
     private readonly completeElapsedBookingsService: CompleteElapsedBookingsService,
     private readonly configService: ConfigService,
     private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(BookingMaintenanceScheduler.name);
-  }
-
-  /** Frees rooms and seats held by abandoned checkouts. */
-  @Cron(process.env.HOLD_SWEEP_CRON || DEFAULT_HOLD_SWEEP_CRON, { name: 'expire-stale-holds' })
-  async expireStaleHolds(): Promise<void> {
-    const affected = await this.expireStaleHoldsService.execute();
-    if (affected > 0) {
-      this.logger.info({ affected }, 'Expired stale booking holds');
-    }
   }
 
   /** Closes departures whose date has passed, so a past date can never be sold. */

@@ -295,17 +295,21 @@ export class PrismaBookingRepository extends BookingRepository {
   }
 
   /**
-   * One atomic statement, so statuses and seat counters can never diverge, and a
-   * concurrent run from another replica simply matches no rows.
+   * Releases one booking's hold, driven by the delayed message that names it.
+   * One atomic statement, so statuses and seat counters can never diverge, and
+   * the status guard means the message is only a prompt to look, never
+   * permission to expire: a booking confirmed a second before the message
+   * arrives matches zero rows here, as does a redelivery.
    */
-  async expireStaleHolds(now: Date): Promise<number> {
+  async expireHold(bookingId: number, now: Date): Promise<boolean> {
     const result = await this.prisma.$primary().$queryRaw<Array<{ expired: number }>>`
       WITH expired AS (
         UPDATE "bookings"
         SET "status" = 'EXPIRED', "updated_at" = NOW()
-        WHERE "status" = 'PENDING'
+        WHERE "id" = ${bookingId}
+          AND "status" = 'PENDING'
           AND "hold_expires_at" IS NOT NULL
-          AND "hold_expires_at" < ${now}
+          AND "hold_expires_at" <= ${now}
         RETURNING "id", "type", "tour_departure_id", "seats"
       ), released AS (
         SELECT "tour_departure_id" AS id, SUM("seats")::int AS seats
@@ -322,7 +326,7 @@ export class PrismaBookingRepository extends BookingRepository {
       )
       SELECT (SELECT COUNT(*)::int FROM expired) AS "expired"
     `;
-    return result[0]?.expired ?? 0;
+    return (result[0]?.expired ?? 0) > 0;
   }
 
   async closeElapsedDepartures(today: Date): Promise<number> {

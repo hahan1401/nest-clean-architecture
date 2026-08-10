@@ -4,23 +4,30 @@ import { BookingRepository } from '../../domain/repositories/booking.repository'
 import {
   CloseElapsedDeparturesUseCase,
   CompleteElapsedBookingsUseCase,
-  ExpireStaleHoldsUseCase,
+  ExpireBookingHoldUseCase,
 } from '../../domain/usecases/maintenance.usecase';
 
 /**
- * The three maintenance jobs. Each delegates to a single atomic statement in the
- * repository, which is what makes them safe to run concurrently: every replica
- * of this service fires its own cron, and a second run simply matches no rows.
+ * Each delegates to a single atomic statement in the repository, which is what
+ * makes them safe to run concurrently: every replica of this service fires its
+ * own cron, and a second run simply matches no rows.
  *
  * `now` is injectable so the specs do not need a fake clock.
  */
 
+/**
+ * Releases one booking's hold, driven by the delayed message rather than a poll.
+ *
+ * The message is a prompt to look, not permission to expire: the repository
+ * re-checks status and hold_expires_at in the same statement, so a booking
+ * confirmed moments earlier survives, and a redelivery is a no-op.
+ */
 @Injectable()
-export class ExpireStaleHoldsService implements ExpireStaleHoldsUseCase {
+export class ExpireBookingHoldService implements ExpireBookingHoldUseCase {
   constructor(private readonly bookingRepository: BookingRepository) {}
 
-  execute(now: Date = new Date()): Promise<number> {
-    return this.bookingRepository.expireStaleHolds(now);
+  execute(bookingId: number, now: Date = new Date()): Promise<boolean> {
+    return this.bookingRepository.expireHold(bookingId, now);
   }
 }
 

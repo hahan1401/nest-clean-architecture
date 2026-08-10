@@ -41,6 +41,17 @@ export const EMAIL_PATTERNS = {
   SEND_GMAIL: 'email.send.gmail',
 } as const;
 
+/**
+ * RabbitMQ routing keys for the hold lifecycle. Not part of BOOKING_PATTERNS:
+ * those are TCP message patterns the gateway calls, these never leave the broker.
+ */
+export const BOOKING_HOLD_PATTERNS = {
+  /** Published when a PENDING booking is created; lands in the delay queue. */
+  SCHEDULED: 'booking.hold.scheduled',
+  /** What the delay queue dead-letters to when the hold lapses. */
+  EXPIRE: 'booking.hold.expire',
+} as const;
+
 export const BOOKING_PATTERNS = {
   // Rooms
   CREATE_ROOM: 'create_room',
@@ -78,9 +89,4 @@ export const BOOKING_PATTERNS = {
   // Self-service cancellation from the emailed link
   GET_BOOKING_BY_CANCELLATION_TOKEN: 'get_booking_by_cancellation_token',
   CANCEL_BOOKING_BY_TOKEN: 'cancel_booking_by_token',
-
-  // Daily maintenance jobs
-  EXPIRE_STALE_HOLDS: 'expire_stale_holds',
-  CLOSE_ELAPSED_DEPARTURES: 'close_elapsed_departures',
-  COMPLETE_ELAPSED_BOOKINGS: 'complete_elapsed_bookings',
 } as const;

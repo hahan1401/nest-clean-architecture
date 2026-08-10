@@ -641,9 +641,10 @@ availability. Use it to show a breakdown before the customer commits. It holds n
 
 **2 — Create.** `POST /bookings` returns a `PENDING` booking with `holdExpiresAt` (default 3
 minutes, `BOOKING_HOLD_TTL_MINUTES`). The slot is genuinely held from this moment. Render a
-countdown from `holdExpiresAt`; when it lapses, stop offering "confirm" and re-check availability —
-a background sweep flips the row to `EXPIRED`, but the sweep runs on a cron (~10 min), so a booking
-can be past its deadline and still read as `PENDING`. Trust the timestamp, not the status.
+countdown from `holdExpiresAt`; when it lapses, stop offering "confirm" and re-check availability.
+A delayed RabbitMQ message flips the row to `EXPIRED` at that exact moment, so it is usually already
+`EXPIRED` by the time you look — but a broker hiccup can leave a booking past its deadline still
+reading `PENDING`. Trust the timestamp, not the status.
 
 **3 — Confirm.** `POST /bookings/:id/confirm` transitions to `CONFIRMED` and triggers the customer
 and owner emails. The transition is its own idempotency guard: a double-submit returns

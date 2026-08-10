@@ -78,8 +78,12 @@ export abstract class BookingRepository {
     reason: string | null,
   ): Promise<Booking | null>;
 
-  /** PENDING bookings past their hold -> EXPIRED, returning their seats. */
-  abstract expireStaleHolds(now: Date): Promise<number>;
+  /**
+   * One booking's hold -> EXPIRED, returning its seats. False when it did not
+   * apply, which is the normal outcome for a booking that was confirmed or
+   * cancelled before its hold ran out, or whose hold was pushed back.
+   */
+  abstract expireHold(bookingId: number, now: Date): Promise<boolean>;
 
   /** OPEN departures already in the past -> CLOSED. */
   abstract closeElapsedDepartures(today: Date): Promise<number>;

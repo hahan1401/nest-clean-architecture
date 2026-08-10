@@ -11,12 +11,6 @@ export type RoomAvailabilityState = 'AVAILABLE' | 'ON_HOLD' | 'BOOKED';
 
 export interface RoomAvailability {
   room: Room;
-  /**
-   * True only for AVAILABLE. Kept alongside `state` so existing clients that
-   * branch on a boolean keep working - a held room reads as unavailable to them,
-   * which is correct, just less informative.
-   */
-  available: boolean;
   state: RoomAvailabilityState;
   /**
    * When the hold blocking this room lapses. Set only for ON_HOLD, and null even

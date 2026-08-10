@@ -3,7 +3,6 @@ import {
   BookingResponseDto,
   CreateBookingDto,
   CreatePriceRuleDto,
-  MaintenanceResultDto,
   PriceQuoteResponseDto,
   PriceRuleResponseDto,
   QuotePriceDto,
@@ -22,11 +21,6 @@ import {
   GetBookingByReferenceService,
   GetBookingService,
 } from '../../application/usecases/get-booking.service';
-import {
-  CloseElapsedDeparturesService,
-  CompleteElapsedBookingsService,
-  ExpireStaleHoldsService,
-} from '../../application/usecases/maintenance.service';
 import {
   CreatePriceRuleService,
   DeletePriceRuleService,
@@ -51,9 +45,6 @@ export class BookingController {
     private readonly listPriceRulesService: ListPriceRulesService,
     private readonly deletePriceRuleService: DeletePriceRuleService,
     private readonly quotePriceService: QuotePriceService,
-    private readonly expireStaleHoldsService: ExpireStaleHoldsService,
-    private readonly closeElapsedDeparturesService: CloseElapsedDeparturesService,
-    private readonly completeElapsedBookingsService: CompleteElapsedBookingsService,
   ) {}
 
   // --- Bookings ------------------------------------------------------------
@@ -206,22 +197,5 @@ export class BookingController {
       throw new ValidationError('tourDepartureId and seats are required for a tour quote');
     }
     return { type: 'TOUR', tourDepartureId: data.tourDepartureId, seats: data.seats };
-  }
-
-  // --- Maintenance jobs (also driven by the scheduler) ----------------------
-
-  @MessagePattern(BOOKING_PATTERNS.EXPIRE_STALE_HOLDS)
-  async expireStaleHolds(): Promise<MaintenanceResultDto> {
-    return new MaintenanceResultDto(await this.expireStaleHoldsService.execute());
-  }
-
-  @MessagePattern(BOOKING_PATTERNS.CLOSE_ELAPSED_DEPARTURES)
-  async closeElapsedDepartures(): Promise<MaintenanceResultDto> {
-    return new MaintenanceResultDto(await this.closeElapsedDeparturesService.execute());
-  }
-
-  @MessagePattern(BOOKING_PATTERNS.COMPLETE_ELAPSED_BOOKINGS)
-  async completeElapsedBookings(): Promise<MaintenanceResultDto> {
-    return new MaintenanceResultDto(await this.completeElapsedBookingsService.execute());
   }
 }

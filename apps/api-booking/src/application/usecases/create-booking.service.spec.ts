@@ -10,13 +10,15 @@ import {
   TourDeparture,
 } from '@app/database';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
+import { BookingHoldSchedulerPort } from '../../domain/ports/booking-hold-scheduler.port';
 import { PricingPort } from '../../domain/ports/pricing.port';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import { RoomRepository } from '../../domain/repositories/room.repository';
 import { TourDepartureRepository } from '../../domain/repositories/tour-departure.repository';
 import { TourRepository } from '../../domain/repositories/tour.repository';
 import { CreateBookingInput } from '../../domain/usecases/booking.usecase';
-import { CreateBookingService } from './create-booking.service';
+import { CreateBookingService, DEFAULT_HOLD_TTL_MINUTES } from './create-booking.service';
 
 const FAR_FUTURE = { from: new Date('2099-02-13'), to: new Date('2099-02-16') };
 
@@ -77,6 +79,18 @@ const departure = (overrides: Partial<TourDeparture> = {}): TourDeparture =>
     ...overrides,
   });
 
+const makeLogger = () =>
+  ({
+    setContext: jest.fn(),
+    info: jest.fn(),
+    error: jest.fn(),
+  }) as unknown as jest.Mocked<PinoLogger>;
+
+const makeHoldScheduler = () =>
+  ({
+    scheduleExpiry: jest.fn().mockResolvedValue(undefined),
+  }) as unknown as jest.Mocked<BookingHoldSchedulerPort>;
+
 const roomInput = (overrides: Partial<Record<string, unknown>> = {}): CreateBookingInput => ({
   type: 'ROOM',
   roomId: 1,
@@ -101,6 +115,7 @@ describe('CreateBookingService', () => {
   let tourRepository: jest.Mocked<TourRepository>;
   let departureRepository: jest.Mocked<TourDepartureRepository>;
   let pricing: jest.Mocked<PricingPort>;
+  let holdScheduler: jest.Mocked<BookingHoldSchedulerPort>;
   let service: CreateBookingService;
 
   beforeEach(() => {
@@ -114,6 +129,7 @@ describe('CreateBookingService', () => {
       findById: jest.fn(),
     } as unknown as jest.Mocked<TourDepartureRepository>;
     pricing = { quoteRoomStay: jest.fn(), quoteTourSeats: jest.fn() };
+    holdScheduler = makeHoldScheduler();
 
     const configService = {
       get: jest.fn().mockReturnValue(30),
@@ -125,7 +141,9 @@ describe('CreateBookingService', () => {
       tourRepository,
       departureRepository,
       pricing,
+      holdScheduler,
       configService,
+      makeLogger(),
     );
   });
 
@@ -269,7 +287,9 @@ describe('hold TTL', () => {
         {} as jest.Mocked<TourRepository>,
         {} as jest.Mocked<TourDepartureRepository>,
         pricing,
+        makeHoldScheduler(),
         configService,
+        makeLogger(),
       ),
     };
   };
@@ -279,12 +299,12 @@ describe('hold TTL', () => {
     return Math.round((data.holdExpiresAt.getTime() - Date.now()) / 60_000);
   };
 
-  it('holds the slot for 3 minutes by default', async () => {
+  it('falls back to the built-in default when the env is unset', async () => {
     const { service, bookingRepository } = buildWith(undefined);
 
     await service.execute(roomInput());
 
-    expect(heldMinutes(bookingRepository)).toBe(3);
+    expect(heldMinutes(bookingRepository)).toBe(DEFAULT_HOLD_TTL_MINUTES);
   });
 
   it('honours BOOKING_HOLD_TTL_MINUTES when set', async () => {
@@ -293,5 +313,57 @@ describe('hold TTL', () => {
     await service.execute(roomInput());
 
     expect(heldMinutes(bookingRepository)).toBe(15);
+  });
+});
+
+describe('hold expiry scheduling', () => {
+  const HOLD_MS = 3 * 60_000;
+
+  const build = (scheduleExpiry: jest.Mock) => {
+    const created = new Booking({
+      id: 42,
+      holdExpiresAt: new Date(Date.now() + HOLD_MS),
+    });
+    const bookingRepository = {
+      createRoomBooking: jest.fn().mockResolvedValue(created),
+    } as unknown as jest.Mocked<BookingRepository>;
+
+    return new CreateBookingService(
+      bookingRepository,
+      {
+        findById: jest.fn().mockResolvedValue(room()),
+      } as unknown as jest.Mocked<RoomRepository>,
+      {} as jest.Mocked<TourRepository>,
+      {} as jest.Mocked<TourDepartureRepository>,
+      {
+        quoteRoomStay: jest.fn().mockResolvedValue(quote(900_000)),
+        quoteTourSeats: jest.fn(),
+      },
+      { scheduleExpiry },
+      { get: jest.fn() } as unknown as ConfigService,
+      makeLogger(),
+    );
+  };
+
+  it('schedules the release for the booking it just created', async () => {
+    const scheduleExpiry = jest.fn().mockResolvedValue(undefined);
+
+    await build(scheduleExpiry).execute(roomInput());
+
+    expect(scheduleExpiry).toHaveBeenCalledTimes(1);
+    const [bookingId, holdExpiresAt] = scheduleExpiry.mock.calls[0] as [number, Date];
+    expect(bookingId).toBe(42);
+    // Scheduled off the row's own deadline, not a recomputed one.
+    expect(holdExpiresAt.getTime() - Date.now()).toBeGreaterThan(HOLD_MS - 5_000);
+  });
+
+  it('still returns the booking when scheduling rejects', async () => {
+    // The port contract says this cannot throw, but a future implementation
+    // breaking it must not cost the guest a booking that is already committed.
+    const scheduleExpiry = jest.fn().mockRejectedValue(new Error('broker down'));
+
+    const booking = await build(scheduleExpiry).execute(roomInput());
+
+    expect(booking.id).toBe(42);
   });
 });
