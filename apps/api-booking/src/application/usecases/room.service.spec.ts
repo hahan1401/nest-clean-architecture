@@ -175,3 +175,50 @@ describe('CheckRoomAvailabilityService', () => {
     );
   });
 });
+
+describe('a sold room in the search results', () => {
+  const FREES_AT = new Date('2027-02-16T11:00:00.000Z');
+
+  it('is returned as BOOKED with when it frees up, and is not priced', async () => {
+    const roomRepository = {
+      findAvailable: jest
+        .fn()
+        .mockResolvedValue([
+          { room: room(), held: false, heldUntil: null, availableFrom: FREES_AT },
+        ]),
+    } as unknown as jest.Mocked<RoomRepository>;
+    const pricing = {
+      quoteRoomStay: jest.fn().mockResolvedValue(quote()),
+      quoteTourSeats: jest.fn(),
+    };
+
+    const [result] = await new SearchAvailableRoomsService(roomRepository, pricing).execute({
+      range: RANGE,
+    });
+
+    // The guest sees the room exists and when to come back...
+    expect(result.state).toBe('BOOKED');
+    expect(result.availableFrom).toEqual(FREES_AT);
+    // ...but not a price for dates they cannot have.
+    expect(result.quote).toBeNull();
+    expect(pricing.quoteRoomStay).not.toHaveBeenCalled();
+  });
+
+  it('outranks a hold on the same room', async () => {
+    const roomRepository = {
+      findAvailable: jest
+        .fn()
+        .mockResolvedValue([
+          { room: room(), held: true, heldUntil: HELD_UNTIL, availableFrom: FREES_AT },
+        ]),
+    } as unknown as jest.Mocked<RoomRepository>;
+
+    const [result] = await new SearchAvailableRoomsService(roomRepository, {
+      quoteRoomStay: jest.fn(),
+      quoteTourSeats: jest.fn(),
+    }).execute({ range: RANGE });
+
+    // However the hold resolves, the sold stay still blocks the window.
+    expect(result.state).toBe('BOOKED');
+  });
+});

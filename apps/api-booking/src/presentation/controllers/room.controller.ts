@@ -79,7 +79,13 @@ export class RoomController {
     });
     return results.map(
       (result) =>
-        new RoomAvailabilityResponseDto(result.room, result.state, result.quote, result.heldUntil),
+        new RoomAvailabilityResponseDto(
+          result.room,
+          result.state,
+          result.quote,
+          result.heldUntil,
+          result.availableFrom,
+        ),
     );
   }
 
@@ -96,6 +102,7 @@ export class RoomController {
       result.state,
       result.quote,
       result.heldUntil,
+      result.availableFrom,
     );
   }
 

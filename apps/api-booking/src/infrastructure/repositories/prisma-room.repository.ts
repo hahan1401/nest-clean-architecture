@@ -2,12 +2,19 @@ import { BookingStatus, PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '
 import { Inject, Injectable } from '@nestjs/common';
 import type { RoomAvailabilityState, RoomOffer } from '../../domain/models/availability';
 import { DateRange } from '../../domain/models/date-range';
+import { toStayWindow } from '../../domain/models/stay-window';
 import {
   CreateRoomData,
   RoomListFilter,
   RoomRepository,
 } from '../../domain/repositories/room.repository';
-import { BOOKED_STATUSES, SLOT_HOLDING_STATUSES } from './booking-status.constants';
+import { SLOT_HOLDING_STATUSES } from './booking-status.constants';
+
+/** Same terms as the tsrange constraint; the house times are applied here. */
+const overlapping = (range: DateRange) => {
+  const stay = toStayWindow(range);
+  return { checkIn: { lt: stay.to }, checkOut: { gt: stay.from } };
+};
 
 @Injectable()
 export class PrismaRoomRepository extends RoomRepository {
@@ -50,24 +57,25 @@ export class PrismaRoomRepository extends RoomRepository {
    *
    * The overlap test is [checkIn, checkOut): an existing booking clashes when it
    * starts before our checkout AND ends after our check-in. Identical semantics
-   * to the '[)' daterange in bookings_room_no_overlap, so this can never
-   * disagree with the constraint.
+   * to the '[)' tsrange in bookings_room_no_overlap, so this can never disagree
+   * with the constraint - including the same-day turnover the hours now allow.
+   *
+   * Every room the guest count fits is returned, sold ones included. A guest
+   * looking at a full house still wants to see what the house has and when it
+   * frees up; hiding those rows just makes the search look broken.
    */
   async findAvailable(range: DateRange, filter: RoomListFilter): Promise<RoomOffer[]> {
-    const overlaps = { checkIn: { lt: range.to }, checkOut: { gt: range.from } };
+    const overlaps = overlapping(range);
 
     const rooms = await this.prisma.$replica().room.findMany({
       where: {
         isActive: filter.isActive ?? true,
         maxGuests: filter.guests ? { gte: filter.guests } : undefined,
-        // Only genuinely sold rooms are excluded. A PENDING overlap is reported
-        // rather than hidden, so a guest can wait the hold out.
-        bookings: { none: { status: { in: [...BOOKED_STATUSES] }, ...overlaps } },
       },
       include: {
         bookings: {
-          where: { status: BookingStatus.PENDING, ...overlaps },
-          select: { holdExpiresAt: true },
+          where: { status: { in: [...SLOT_HOLDING_STATUSES] }, ...overlaps },
+          select: { status: true, holdExpiresAt: true, checkOut: true },
         },
       },
       orderBy: [{ basePrice: 'asc' }, { name: 'asc' }],
@@ -75,11 +83,28 @@ export class PrismaRoomRepository extends RoomRepository {
       take: filter.take,
     });
 
-    return rooms.map(({ bookings, ...room }) => ({
-      room: new Room(room),
-      held: bookings.length > 0,
-      heldUntil: latestHoldExpiry(bookings),
-    }));
+    return rooms.map(({ bookings, ...room }) => {
+      const sold = bookings.filter((b) => b.status !== BookingStatus.PENDING);
+      const holds = bookings.filter((b) => b.status === BookingStatus.PENDING);
+
+      // Sold outranks held: however the holds resolve, the window as a whole
+      // cannot free up before the last sold stay ends.
+      if (sold.length > 0) {
+        return {
+          room: new Room(room),
+          held: false,
+          heldUntil: null,
+          availableFrom: latestCheckOut([...sold, ...holds]),
+        };
+      }
+
+      return {
+        room: new Room(room),
+        held: holds.length > 0,
+        heldUntil: latestHoldExpiry(holds),
+        availableFrom: null,
+      };
+    });
   }
 
   /**
@@ -90,31 +115,44 @@ export class PrismaRoomRepository extends RoomRepository {
   async checkAvailability(
     roomId: number,
     range: DateRange,
-  ): Promise<{ state: RoomAvailabilityState; heldUntil: Date | null }> {
+  ): Promise<{
+    state: RoomAvailabilityState;
+    heldUntil: Date | null;
+    availableFrom: Date | null;
+  }> {
     const clashes = await this.prisma.$primary().booking.findMany({
       where: {
         roomId,
         // Still the full slot-holding list: this answers "may a write proceed",
         // and PENDING blocks the exclusion constraint just as CONFIRMED does.
         status: { in: [...SLOT_HOLDING_STATUSES] },
-        checkIn: { lt: range.to },
-        checkOut: { gt: range.from },
+        ...overlapping(range),
       },
-      select: { status: true, holdExpiresAt: true },
+      select: { status: true, holdExpiresAt: true, checkOut: true },
     });
 
     if (clashes.length === 0) {
-      return { state: 'AVAILABLE', heldUntil: null };
+      return { state: 'AVAILABLE', heldUntil: null, availableFrom: null };
     }
 
     // A single sold night outranks any number of holds: the window as a whole
     // cannot free up, however the holds resolve.
     if (clashes.some((clash) => clash.status !== BookingStatus.PENDING)) {
-      return { state: 'BOOKED', heldUntil: null };
+      return { state: 'BOOKED', heldUntil: null, availableFrom: latestCheckOut(clashes) };
     }
 
-    return { state: 'ON_HOLD', heldUntil: latestHoldExpiry(clashes) };
+    return { state: 'ON_HOLD', heldUntil: latestHoldExpiry(clashes), availableFrom: null };
   }
+}
+
+/**
+ * When the room is free again: the checkout of the last stay overlapping the
+ * requested window. Not "the next window that fits" - that is a different and
+ * much more expensive question, and this one is what the guest is owed first.
+ */
+function latestCheckOut(stays: Array<{ checkOut: Date | null }>): Date | null {
+  const ends = stays.map((s) => s.checkOut).filter((end): end is Date => end !== null);
+  return ends.length === 0 ? null : new Date(Math.max(...ends.map((end) => end.getTime())));
 }
 
 /**

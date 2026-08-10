@@ -44,9 +44,10 @@ future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
 | | |
 |---|---|
 | **Catalogue** | Rooms with a nightly base price and a guest cap; tours with a per-person price and dated, seat-capped departures. |
-| **Availability** | Free rooms for an arrival/departure window, or departures with enough seats left — each answer carries its own price quote. A room another guest is mid-checkout on still appears, marked `ON_HOLD` with the time its hold lapses, so a guest can come back for it rather than assume it is gone. |
+| **Availability** | Every room the guest count fits, whatever its state for those dates — free, `ON_HOLD` while another guest is mid-checkout, or `BOOKED` with the moment it frees up. Free and held rooms carry a price quote. The house never looks smaller than it is. |
 | **Pricing** | `PriceRule` overrides per room or tour, by date window and/or weekday, resolved by a pure function and then **frozen** into `booking_lines`. Later price edits never rewrite history. |
 | **Holds** | `POST /api/bookings` genuinely reserves the slot for 3 minutes and returns `holdExpiresAt`. A delayed RabbitMQ message, published when the hold starts and timed to the second, releases it. |
+| **Stays** | Booked by calendar date, held from 13:00 to 11:00 house time. A `tsrange` exclusion constraint enforces it, so one guest can leave and the next arrive on the same day — which a date-only range called an overlap. |
 | **Confirmation** | `PENDING → CONFIRMED` commits before the broker is touched, then fires two emails through RabbitMQ → AWS SES. |
 | **Cancellation** | Staff-side by id, or customer-side through a 32-byte token that travels only inside the customer's email and never appears in an API response. |
 | **Chatbot** | SSE streaming answers, grounded in documents chunked and embedded into pgvector. |

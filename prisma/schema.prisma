@@ -198,9 +198,13 @@ model Booking {
   type              BookableType
   status            BookingStatus @default(PENDING)
 
-  roomId   Int?      @map("room_id")
-  checkIn  DateTime? @map("check_in") @db.Date
-  checkOut DateTime? @map("check_out") @db.Date
+  roomId Int? @map("room_id")
+  /// The instants the room is held, not calendar dates: 13:00 on the arrival day
+  /// to 11:00 on the departure day (see stay-window.ts). Storing the hours is
+  /// what lets one guest leave and another arrive on the same day - the
+  /// bookings_room_no_overlap tsrange would otherwise call that an overlap.
+  checkIn  DateTime? @map("check_in")
+  checkOut DateTime? @map("check_out")
 
   tourDepartureId Int? @map("tour_departure_id")
   seats           Int?

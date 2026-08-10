@@ -82,6 +82,8 @@ export class RoomAvailabilityResponseDto {
   state: RoomAvailabilityState;
   /** ISO timestamp the blocking hold lapses; null unless `state` is ON_HOLD. */
   heldUntil: Date | null;
+  /** ISO timestamp the room is free again; null unless `state` is BOOKED. */
+  availableFrom: Date | null;
   quote: PriceQuoteResponseDto | null;
 
   constructor(
@@ -89,11 +91,13 @@ export class RoomAvailabilityResponseDto {
     state: RoomAvailabilityState,
     quote: PriceQuote | null,
     heldUntil: Date | null = null,
+    availableFrom: Date | null = null,
   ) {
     this.room = new RoomResponseDto(room);
     this.available = state === 'AVAILABLE';
     this.state = state;
     this.heldUntil = heldUntil;
+    this.availableFrom = availableFrom;
     this.quote = quote ? new PriceQuoteResponseDto(quote) : null;
   }
 }
@@ -206,8 +210,12 @@ export class BookingResponseDto {
   status: BookingStatus;
 
   roomId: number | null;
-  checkIn: string | null;
-  checkOut: string | null;
+  /**
+   * Instants, not calendar dates: 13:00 on the arrival day to 11:00 on the
+   * departure day. The guest still picks dates - these are what the house holds.
+   */
+  checkIn: Date | null;
+  checkOut: Date | null;
 
   tourDepartureId: number | null;
   seats: number | null;
@@ -235,8 +243,8 @@ export class BookingResponseDto {
     this.type = booking.type;
     this.status = booking.status;
     this.roomId = booking.roomId ?? null;
-    this.checkIn = toDateOnly(booking.checkIn);
-    this.checkOut = toDateOnly(booking.checkOut);
+    this.checkIn = booking.checkIn ?? null;
+    this.checkOut = booking.checkOut ?? null;
     this.tourDepartureId = booking.tourDepartureId ?? null;
     this.seats = booking.seats ?? null;
     this.guests = booking.guests;

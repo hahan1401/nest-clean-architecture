@@ -23,9 +23,9 @@ export abstract class RoomRepository {
   abstract findMany(filter: RoomListFilter): Promise<Room[]>;
 
   /**
-   * Rooms that are not sold for `range`: free ones, plus ones a pending booking
-   * is holding, flagged with when that hold lapses. Rooms with a CONFIRMED or
-   * COMPLETED overlap are excluded outright - those are not coming back.
+   * Every active room the guest count fits, whatever its state for `range`:
+   * free, held by someone mid-checkout, or sold. Sold ones carry the checkout of
+   * the last stay in the way, so a caller can say when to come back.
    */
   abstract findAvailable(range: DateRange, filter: RoomListFilter): Promise<RoomOffer[]>;
 
@@ -33,5 +33,9 @@ export abstract class RoomRepository {
   abstract checkAvailability(
     roomId: number,
     range: DateRange,
-  ): Promise<{ state: RoomAvailabilityState; heldUntil: Date | null }>;
+  ): Promise<{
+    state: RoomAvailabilityState;
+    heldUntil: Date | null;
+    availableFrom: Date | null;
+  }>;
 }

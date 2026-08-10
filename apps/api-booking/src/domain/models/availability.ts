@@ -18,8 +18,14 @@ export interface RoomAvailability {
    */
   heldUntil: Date | null;
   /**
+   * When a sold room is free again: the checkout of the last stay overlapping
+   * the requested window. Set only for BOOKED.
+   */
+  availableFrom: Date | null;
+  /**
    * Priced for AVAILABLE and ON_HOLD - a guest deciding whether to wait out a
-   * hold needs to know what they would be waiting for. Null for BOOKED.
+   * hold needs to know what they would be waiting for. Null for BOOKED, whose
+   * price for these dates is moot.
    */
   quote: PriceQuote | null;
 }
@@ -30,4 +36,6 @@ export interface RoomOffer {
   /** Null when the room is free; set when a pending booking is holding it. */
   heldUntil: Date | null;
   held: boolean;
+  /** Set when the room is sold for the window: when the last stay ends. */
+  availableFrom: Date | null;
 }

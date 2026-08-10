@@ -100,14 +100,25 @@ export class SearchAvailableRoomsService implements SearchAvailableRoomsUseCase 
     });
 
     // Held rooms are priced too: someone deciding whether to wait out a hold
-    // needs to know what they would be waiting for.
+    // needs to know what they would be waiting for. Sold ones are not - the
+    // price of dates they cannot have is noise, and it costs a query each.
     return Promise.all(
-      offers.map(async (offer) => ({
-        room: offer.room,
-        state: offer.held ? ('ON_HOLD' as const) : ('AVAILABLE' as const),
-        heldUntil: offer.heldUntil,
-        quote: await this.pricing.quoteRoomStay(offer.room, input.range),
-      })),
+      offers.map(async (offer) => {
+        const state = offer.availableFrom
+          ? ('BOOKED' as const)
+          : offer.held
+            ? ('ON_HOLD' as const)
+            : ('AVAILABLE' as const);
+
+        return {
+          room: offer.room,
+          state,
+          heldUntil: offer.heldUntil,
+          availableFrom: offer.availableFrom,
+          quote:
+            state === 'BOOKED' ? null : await this.pricing.quoteRoomStay(offer.room, input.range),
+        };
+      }),
     );
   }
 }
@@ -129,15 +140,15 @@ export class CheckRoomAvailabilityService implements CheckRoomAvailabilityUseCas
 
     // A retired room is never coming back for this window, so it reads as BOOKED
     // rather than held - there is nothing to wait for.
-    const { state, heldUntil } = room.isActive
+    const { state, heldUntil, availableFrom } = room.isActive
       ? await this.roomRepository.checkAvailability(room.id, input.range)
-      : { state: 'BOOKED' as const, heldUntil: null };
+      : { state: 'BOOKED' as const, heldUntil: null, availableFrom: null };
 
     // No point pricing a room nobody can ever take; a held one is still worth
     // pricing, because the guest may come back for it.
     const quote = state === 'BOOKED' ? null : await this.pricing.quoteRoomStay(room, input.range);
 
-    return { room, state, heldUntil, quote };
+    return { room, state, heldUntil, availableFrom, quote };
   }
 }
 

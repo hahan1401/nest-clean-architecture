@@ -11,6 +11,8 @@ import {
 import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BookingDetail } from '../../domain/models/booking-detail';
+import type { DateRange } from '../../domain/models/date-range';
+import { toStayWindow } from '../../domain/models/stay-window';
 import {
   BookingHistoryFilter,
   BookingRepository,
@@ -20,6 +22,18 @@ import {
 import { ACTIVE_STATUSES } from './booking-status.constants';
 
 const ROOM_OVERLAP_CONSTRAINT = 'bookings_room_no_overlap';
+
+/**
+ * The overlap test, in the same terms as the tsrange in
+ * bookings_room_no_overlap: a stored stay clashes when it starts before ours
+ * ends and ends after ours starts. Callers pass the calendar dates the guest
+ * picked; the house times are applied here so the comparison is instant-to-
+ * instant and a same-day turnover no longer reads as a collision.
+ */
+const overlapping = (range: DateRange) => {
+  const stay = toStayWindow(range);
+  return { checkIn: { lt: stay.to }, checkOut: { gt: stay.from } };
+};
 
 /**
  * Postgres raises 23P01 (exclusion_violation) when two bookings overlap. Prisma
@@ -71,6 +85,8 @@ export class PrismaBookingRepository extends BookingRepository {
   }
 
   async createRoomBooking(data: CreateRoomBookingData): Promise<Booking | null> {
+    const stay = toStayWindow(data.range);
+
     try {
       // $transaction always runs on the primary, so no $primary() calls inside.
       return await this.prisma.$transaction(async (tx) => {
@@ -84,8 +100,10 @@ export class PrismaBookingRepository extends BookingRepository {
             type: BookableType.ROOM,
             status: BookingStatus.PENDING,
             roomId: data.roomId,
-            checkIn: data.range.from,
-            checkOut: data.range.to,
+            // The house times are applied here, at the one boundary where a
+            // calendar range becomes the instants the room is held.
+            checkIn: stay.from,
+            checkOut: stay.to,
             guests: data.guests,
             customerName: data.customer.name,
             customerEmail: data.customer.email,
@@ -208,9 +226,7 @@ export class PrismaBookingRepository extends BookingRepository {
       where: {
         roomId,
         status: filter.status,
-        ...(filter.range
-          ? { checkIn: { lt: filter.range.to }, checkOut: { gt: filter.range.from } }
-          : {}),
+        ...(filter.range ? overlapping(filter.range) : {}),
       },
       include: { lines: { orderBy: { lineDate: 'asc' } } },
       orderBy: { checkIn: 'desc' },

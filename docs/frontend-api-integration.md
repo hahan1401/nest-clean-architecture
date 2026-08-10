@@ -75,8 +75,20 @@ new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(25
 
 | Kind | Fields | Format |
 |---|---|---|
-| **Calendar dates** | `checkIn`, `checkOut`, `departureDate`, `from`, `to`, `startDate`, `endDate`, price-line `date` | Date-only string `"2027-02-14"` — **in and out** |
-| **Timestamps** | `createdAt`, `updatedAt`, `holdExpiresAt`, `confirmedAt`, `cancelledAt`, `completedAt` | Full ISO 8601 with `Z` |
+| **Calendar dates** | `departureDate`, `from`, `to`, `startDate`, `endDate`, price-line `date` | Date-only string `"2027-02-14"` — **in and out** |
+| **Timestamps** | `createdAt`, `updatedAt`, `holdExpiresAt`, `confirmedAt`, `cancelledAt`, `completedAt`, `heldUntil`, `availableFrom` | Full ISO 8601 with `Z` |
+| **Stay boundaries** | `checkIn`, `checkOut` | **Date-only going in, ISO timestamp coming back** |
+
+`checkIn` and `checkOut` are the exception worth reading twice. You **book** by calendar
+date — `POST /bookings` still takes `"2027-02-14"` — but a booking **reads back** as the
+instants the room is held: 13:00 on the arrival day to 11:00 on the departure day, house
+time (Asia/Ho_Chi_Minh, UTC+7 year round). So `"2027-02-14"` in becomes
+`"2027-02-14T06:00:00.000Z"` out.
+
+That is what lets the house turn a room over in a day: a stay ending at 11:00 and one
+starting at 13:00 on the same date no longer collide, so the room shows as free for the
+incoming guest. Render these with a time zone — `toISOString().slice(0, 10)` on a check-out
+returns the wrong day west of UTC, and dropping the hour hides the turnover from the guest.
 
 Calendar fields are validated with `@IsDateString({ strict: true })`. Sending
 `"2027-02-14T00:00:00.000Z"` where a date-only string is expected is rejected with a 400.

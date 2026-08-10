@@ -415,8 +415,8 @@ Catalogue and availability:
 |---------|---------|-------------|
 | `create_room` / `list_rooms` / `get_room` | room DTO / filter / `{ id }` | Room catalogue |
 | `get_room_by_code` | `{ code }` | One room by its unique human-readable `code` |
-| `search_available_rooms` | `{ from, to, guests?, skip?, take? }` | Free **and held** rooms for a window, each with a state and a quote |
-| `check_room_availability` | `{ roomId, from, to }` | One room: `AVAILABLE` / `ON_HOLD` (with `heldUntil`) / `BOOKED`, plus its quote |
+| `search_available_rooms` | `{ from, to, guests?, skip?, take? }` | **Every** room the guest count fits, each with its state; sold ones carry `availableFrom` |
+| `check_room_availability` | `{ roomId, from, to }` | One room: `AVAILABLE` / `ON_HOLD` (with `heldUntil`) / `BOOKED` (with `availableFrom`), plus its quote |
 | `list_room_bookings` | `{ roomId, status?, from?, to? }` | Full booking history for a room |
 | `create_tour` / `list_tours` / `get_tour` | tour DTO / filter / `{ id }` | Tour catalogue |
 | `get_tour_by_slug` | `{ slug }` | One tour by its unique `slug` |
@@ -501,6 +501,31 @@ queue. Every hold uses the same `BOOKING_HOLD_TTL_MINUTES`, so queue order is ex
 and the delay is exact. Raise that value and messages already queued keep the older, longer
 wait ahead of newer ones, which delays those releases. If holds ever need per-booking
 durations, install the delayed-message plugin instead of stretching this.
+
+### Stays are instants, not calendar days
+
+A guest picks calendar dates. The room is held from **13:00 on the arrival day to 11:00 on
+the departure day**, house time — Asia/Ho_Chi_Minh, UTC+7 year round with no daylight
+saving, which is why `stay-window.ts` does fixed-offset arithmetic instead of pulling in a
+timezone library. `check_in` / `check_out` are `timestamp` columns holding those instants.
+
+The point is the turnover. Under date-only storage a stay ending on the 16th and one
+starting on the 16th shared that day, `daterange('[)')` called it an overlap, and the
+exclusion constraint refused the second booking — so a room could never be re-sold on its
+own checkout day. With hours, `tsrange(check_in, check_out, '[)')` sees `…T04:00Z` and
+`…T06:00Z` as disjoint and the booking goes through, while any stay sharing a real night
+still collides.
+
+Three rules keep this from leaking everywhere:
+
+1. **`toStayWindow` is the only place the house times are applied**, and only at the storage
+   boundary — the two repositories that compare against `check_in` / `check_out`.
+2. **Money never sees an hour.** Quotes, price rules and `booking_lines` still work in
+   calendar dates, because a night is still a calendar night: 13 Feb 13:00 → 15 Feb 11:00 is
+   two nights, priced as the 13th and the 14th.
+3. **The API takes dates and returns instants.** `POST /bookings` accepts `"2027-02-14"`;
+   the booking reads back as `"2027-02-14T06:00:00.000Z"`. Clients must render these with a
+   timezone rather than slicing the first ten characters.
 
 ### Email Services (`api-email`, `api-gmail`)
 
