@@ -1,7 +1,7 @@
 {
-  "name": "nest-clean-architecture",
+  "name": "homestay-booking-be",
   "version": "0.0.1",
-  "description": "",
+  "description": "Booking engine for Thong Dong Retreat - NestJS microservices, Prisma, PostgreSQL",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

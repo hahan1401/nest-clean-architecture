@@ -1,98 +1,147 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Thong Dong Retreat — booking engine
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The backend for **Thong Dong Retreat**, a six-room homestay on a pine ridge above Đà Lạt.
+It sells two things: **a room for a range of nights**, and **a seat on a dated journey**.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+NestJS 11 monorepo — one HTTP gateway in front of seven services that speak TCP and
+RabbitMQ — on Prisma 7 / PostgreSQL 17 with a streaming read replica and pgvector.
 
-## Description
+| | |
+|---|---|
+| **Architecture** | [`ARCHITECTURE.md`](./ARCHITECTURE.md) — layering, error model, message patterns, every endpoint, the booking invariants |
+| **API contract** | [`docs/frontend-api-integration.md`](./docs/frontend-api-integration.md) — what a client sends and gets back |
+| **Product** | [`../README.md`](../README.md) — the house, the domain, and the frontend |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## Quickstart
 
 ```bash
-$ npm install
+docker compose up -d          # postgres primary + replica, rabbitmq
+cp .env.example .env.local    # then fill EMAIL_FROM, HOMESTAY_OWNER_EMAIL, GEMINI_API_KEY, AWS_*
+npm install
+npx prisma migrate deploy && npx prisma generate && npx prisma db seed
+
+npm run gateway:dev           # :3000 — every route under /api
+npm run booking:dev           # :3006 — rooms, tours, bookings
 ```
 
-## Compile and run the project
+The gateway and `api-booking` are enough for the whole guest flow. Start
+`user`, `location`, `payment`, `chatbot`, `notification` and `email` only when you
+need them — the gateway proxies lazily, so an unstarted service fails its own routes
+and nothing else.
+
+The seed writes the real catalogue: six rooms (`SUONG`, `THONG`, `SUOI`, `KHOI`, `QUY`,
+`DOI`), three journeys (`cau-dat-sunrise`, `pine-and-waterfall`, `coffee-hills`) and seven
+departures dated relative to seed time, so a fresh database always has something in the
+future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
+`(tourId, departureDate)`) and is safe to re-run.
+
+---
+
+## What it does
+
+| | |
+|---|---|
+| **Catalogue** | Rooms with a nightly base price and a guest cap; tours with a per-person price and dated, seat-capped departures. |
+| **Availability** | Free rooms for an arrival/departure window, or departures with enough seats left — each answer carries its own price quote. |
+| **Pricing** | `PriceRule` overrides per room or tour, by date window and/or weekday, resolved by a pure function and then **frozen** into `booking_lines`. Later price edits never rewrite history. |
+| **Holds** | `POST /api/bookings` genuinely reserves the slot for 30 minutes and returns `holdExpiresAt`. A cron sweep expires what lapses. |
+| **Confirmation** | `PENDING → CONFIRMED` commits before the broker is touched, then fires two emails through RabbitMQ → AWS SES. |
+| **Cancellation** | Staff-side by id, or customer-side through a 32-byte token that travels only inside the customer's email and never appears in an API response. |
+| **Chatbot** | SSE streaming answers, grounded in documents chunked and embedded into pgvector. |
+| **Notifications** | RabbitMQ topic (once per event) and fanout (every replica) into a Socket.IO namespace the gateway proxies at the origin root. |
+| **Payments** | VNPay adapter — bank list, QR, hosted payment URL, return verification. **Not wired into the booking flow**: confirming a booking takes no money today. |
+
+### Two guarantees that do not depend on application code
+
+- A room cannot be double-booked: a Postgres `EXCLUDE USING gist` constraint over
+  `room_id` + `daterange(check_in, check_out, '[)')`, restricted to slot-holding statuses.
+  Half-open ranges make same-day turnover legal.
+- A departure cannot be oversold: a conditional `UPDATE` on `booked_seats` backed by a
+  `CHECK`, correct at READ COMMITTED with no `FOR UPDATE` and no retry loop.
+
+Both surface as `409 CONFLICT`. That is a normal outcome for two guests racing the last
+slot — clients must refresh availability rather than retry.
+
+### Two conventions that are easy to get wrong
+
+- **Money is a whole number of VND** in `Int` columns. `250000` means ₫250,000. No minor
+  unit, no scaling factor.
+- **Calendar dates are `@db.Date` and materialise as UTC midnight.** Build them from
+  date-only ISO strings and read the weekday with `getUTCDay()`. `new Date(2027, 1, 14)`
+  is local time and shifts the night by one.
+
+---
+
+## Layout
+
+```
+apps/
+├── api-gateway/       :3000  HTTP entry point — validation, correlation ids, proxy
+├── api-user/          :3001  users, nearby search
+├── api-location/      :3002  reverse geocoding (Nominatim)
+├── api-payment/       :3003  VNPay
+├── api-chatbot/       :3004  streaming answers + document ingestion
+├── api-notification/  :3005  RabbitMQ consumer → Socket.IO
+├── api-email/            —   RabbitMQ consumer → AWS SES
+└── api-booking/       :3006  rooms, tours, departures, price rules, bookings, cron jobs
+libs/
+├── common/       service tokens, message patterns, DTOs, error model, filters, logging
+├── database/     Prisma client factory, read-replica routing, entities, DatabaseModule
+├── middlewares/  correlation request id
+└── types/        cross-service types
+prisma/           schema, migrations, seed
+docs/             the frontend API contract
+```
+
+Every service is layered the same way — `presentation/` → `application/` → `domain/` ←
+`infrastructure/`, dependencies pointing inward, `domain/` free of framework imports.
+Repository and port contracts are abstract classes so they double as DI tokens.
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) is the full account.
+
+---
+
+## Commands
 
 ```bash
-# development
-$ npm run start
+npm run <service>:dev      # gateway | user | location | payment | chatbot | booking | notification | email
+npm run build:<service>
+npm test                   # jest; specs are co-located as *.spec.ts under apps/ and libs/
 
-# watch mode
-$ npm run start:dev
+npx prisma migrate dev --name <short_snake_case> --create-only   # then hand-edit the SQL
+npx prisma migrate dev
+npx prisma db seed
+npx prisma migrate deploy  # CI / production — never `migrate dev`
 
-# production mode
-$ npm run start:prod
+# The gate before committing
+npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 ```
 
-## Run tests
+> **Migrations need reading before applying.** Prisma models neither `CHECK` nor `EXCLUDE`,
+> so it emits a `DROP` for the GiST exclusion index on every `migrate dev`, and Postgres
+> silently drops any constraint mentioning a retyped column. After a migration that touches
+> `bookings`, `rooms`, `tours` or `tour_departures`, confirm the constraints survived:
+> ```sql
+> SELECT conrelid::regclass, conname FROM pg_constraint
+> WHERE connamespace = 'public'::regnamespace AND contype IN ('c','x') ORDER BY 1, 2;
+> ```
 
-```bash
-# unit tests
-$ npm run test
+---
 
-# e2e tests
-$ npm run test:e2e
+## Status
 
-# test coverage
-$ npm run test:cov
-```
+**There is no authentication anywhere.** Every gateway route is public, including the
+operator-shaped ones — `POST /api/rooms`, `POST /api/price-rules`,
+`POST /api/bookings/:id/confirm`. This is a pre-auth codebase and is not safe to expose to
+the public internet as it stands.
 
-## Deployment
+Also open:
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Payment is not connected to booking. The gateway posts an empty `{}` to `api-payment`,
+  and `/api/payment/ipn` echoes its query string back rather than verifying anything.
+- The cancellation token is logged in plaintext. `CREDENTIAL_PATH_PREFIXES` in
+  `libs/common/src/logger/pino-http.config.ts` matches `/bookings/cancel/` with
+  `startsWith`, but the gateway now sees `/api/bookings/cancel/<token>`.
+- `npm run start:prod` points at `dist/apps/nest-clean-architecture/main`, which no build
+  produces; run the built gateway at `dist/apps/api-gateway/main` instead.

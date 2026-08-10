@@ -1,5 +1,9 @@
 # Clean Architecture - NestJS Microservices + Prisma
 
+The design of the Thong Dong Retreat booking engine. What the system is and how to run it
+is in [`README.md`](./README.md); the client-facing contract is in
+[`docs/frontend-api-integration.md`](./docs/frontend-api-integration.md).
+
 ## High-Level Overview
 
 ```
@@ -69,8 +73,11 @@ homestay-booking-be/
 │
 ├── prisma/
 │   ├── schema.prisma
-│   ├── seed.ts
+│   ├── seed.ts           # the real catalogue, keyed on Room.code / Tour.slug
 │   └── migrations/
+│
+├── docs/
+│   └── frontend-api-integration.md   # the contract a client codes against
 │
 ├── test/
 │   ├── jest-setup.ts  # loads reflect-metadata for DTOs using @Type()
@@ -382,9 +389,9 @@ anywhere, including during bootstrap.
 | Pattern | Payload | Description |
 |---------|---------|-------------|
 | `bank-list` | `{}` | VNPay bank list |
-| `generate-qr` | custom payload | Generate VNPay QR |
-| `generate-url` | custom payload | Build hosted VNPay payment URL |
-| `return-url` | custom payload | Verify VNPay return URL data |
+| `generate-qr` | `{}` from the gateway today | Generate VNPay QR |
+| `generate-url` | `{}` from the gateway today | Build hosted VNPay payment URL |
+| `return-url` | `{}` from the gateway today | Verify VNPay return URL data |
 
 ### Chatbot Service (`api-chatbot`)
 
@@ -499,12 +506,25 @@ socket.on('notification', (n) => console.log(n));
 | `POST` | `/payment/generate-return-url` | `return-url` |
 | `GET` | `/payment/ipn` | currently returns query payload from gateway |
 
+> ⚠️ **Payment is not connected to anything.** All four proxy routes send a literal `{}` —
+> the gateway declares no body parameter, so a posted payload is discarded before it reaches
+> `api-payment` — and `/payment/ipn` echoes its own query string without verifying a
+> signature. Confirming a booking takes no money. Wiring this up means giving each route a
+> validated DTO in `@app/common` first.
+
 ### Chatbot Endpoints
 
 | Method | Path | Proxy Pattern |
 |--------|------|---------------|
 | `GET` | `/chatbot/sse?prompt=...` | `ask-sse` |
 | `GET` | `/chatbot/strict-sse?prompt=...` | `ask-strict-sse` |
+| `POST` | `/chatbot/documents/upload` | `upsert-document` |
+
+The upload route is the one place the gateway does more than proxy: it takes a
+`multipart/form-data` file through `FileInterceptor`, decodes the buffer as UTF-8, rejects an
+empty file or a missing `fileName`, and only then sends the text on for chunking and
+embedding. `update-document` and `delete-document` have no HTTP route yet — they are
+reachable over TCP only.
 
 ### Notification / Email Endpoints
 
@@ -792,6 +812,22 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 | `DAILY_MAINTENANCE_CRON` | `5 0 * * *` | api-booking |
 | `vnp_HashSecret` / `vnp_TmnCode` | - | api-payment |
 | `VNPAY_RETURN_URL` / `VNPAY_IP_ADDR` | optional | api-payment |
+
+---
+
+## Known Gaps
+
+Design decisions that are still outstanding, kept here rather than in issue trackers because
+each one changes the shape of the system.
+
+| Gap | What it means today |
+|-----|---------------------|
+| **No authentication or authorization anywhere** | Every gateway route is public, including the operator-shaped ones: `POST /api/rooms`, `POST /api/price-rules`, `POST /api/bookings/:id/confirm`, `GET /api/bookings/:id`. `users.password` is accepted, stored **in plaintext**, and never verified — there is no login to verify it against. `UserResponseDto` at least keeps it out of responses. The system must not face the public internet as it stands. |
+| **Payment is decorative** | See the note under the payment endpoints — the gateway forwards `{}`, the IPN route verifies nothing, and no booking transition depends on a payment result. |
+| **The cancellation token is logged** | `CREDENTIAL_PATH_PREFIXES` matches `/bookings/cancel/` with `startsWith`, but the `/api` global prefix means the gateway sees `/api/bookings/cancel/<token>`. The prefix list needs the `/api` form, or the match needs to be substring-based. |
+| **Rate limiting and idempotency keys** | Nothing throttles `POST /api/bookings`, and a retried create makes a second hold rather than returning the first. The exclusion constraint keeps this safe, not merely tidy — but it makes a client's network retry visible to the guest as a `409`. |
+| **`api-user` is orphaned from booking** | A `Booking` stores customer name/email/phone as plain columns and never references `User`. The two halves of the system do not know about each other yet. |
+| **No e2e tests** | `test/jest-e2e.json` exists; nothing runs against a live gateway plus a real database, so the Postgres invariants are covered by reasoning and by unit tests around the repositories, not by a concurrency test. |
 
 ---
 
