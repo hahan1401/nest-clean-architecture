@@ -64,6 +64,17 @@ export class TourController {
     );
   }
 
+  /** Declared before @Get(':id') for the same reason - see room.controller.ts. */
+  @Get('slug/:slug')
+  getBySlug(@Req() req: CorrelatedRequest, @Param('slug') slug: string) {
+    return lastValueFrom(
+      this.bookingClient.send<TourResponseDto>(BOOKING_PATTERNS.GET_TOUR_BY_SLUG, {
+        slug,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
   @Get(':id')
   get(@Req() req: CorrelatedRequest, @Param('id') id: string) {
     return lastValueFrom(

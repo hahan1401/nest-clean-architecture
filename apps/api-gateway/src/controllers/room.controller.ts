@@ -65,6 +65,20 @@ export class RoomController {
     );
   }
 
+  /**
+   * Also declared before @Get(':id'): otherwise Express matches "code" as the
+   * id and every /rooms/code/<code> request 404s on a room called "code".
+   */
+  @Get('code/:code')
+  getByCode(@Req() req: CorrelatedRequest, @Param('code') code: string) {
+    return lastValueFrom(
+      this.bookingClient.send<RoomResponseDto>(BOOKING_PATTERNS.GET_ROOM_BY_CODE, {
+        code,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
   @Get(':id')
   get(@Req() req: CorrelatedRequest, @Param('id') id: string) {
     return lastValueFrom(

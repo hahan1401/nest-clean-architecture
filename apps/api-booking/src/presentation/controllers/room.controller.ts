@@ -11,6 +11,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   CheckRoomAvailabilityService,
   CreateRoomService,
+  GetRoomByCodeService,
   GetRoomService,
   ListRoomBookingsService,
   ListRoomsService,
@@ -24,6 +25,7 @@ export class RoomController {
     private readonly createRoomService: CreateRoomService,
     private readonly listRoomsService: ListRoomsService,
     private readonly getRoomService: GetRoomService,
+    private readonly getRoomByCodeService: GetRoomByCodeService,
     private readonly searchAvailableRoomsService: SearchAvailableRoomsService,
     private readonly checkRoomAvailabilityService: CheckRoomAvailabilityService,
     private readonly listRoomBookingsService: ListRoomBookingsService,
@@ -56,6 +58,12 @@ export class RoomController {
   @MessagePattern(BOOKING_PATTERNS.GET_ROOM)
   async get(@Payload() data: { id: string }): Promise<RoomResponseDto> {
     const room = await this.getRoomService.execute(data.id);
+    return new RoomResponseDto(room);
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.GET_ROOM_BY_CODE)
+  async getByCode(@Payload() data: { code: string }): Promise<RoomResponseDto> {
+    const room = await this.getRoomByCodeService.execute(data.code);
     return new RoomResponseDto(room);
   }
 

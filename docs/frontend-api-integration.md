@@ -421,6 +421,7 @@ export interface UserWithDistanceResponse extends UserResponse {
 | `POST` | `/rooms` | `CreateRoomDto` | `201` `RoomResponse` |
 | `GET` | `/rooms` | `skip?`, `take?` (1–100), `guests?` | `200` `RoomResponse[]` |
 | `GET` | `/rooms/availability` | `from`, `to` (**required**), `guests?`, `skip?`, `take?` | `200` `RoomAvailabilityResponse[]` |
+| `GET` | `/rooms/code/:code` | — | `200` `RoomResponse`, `404` when absent |
 | `GET` | `/rooms/:id` | — | `200` `RoomResponse` |
 | `GET` | `/rooms/:id/availability` | `from`, `to` (**required**) | `200` `RoomAvailabilityResponse` (single) |
 | `GET` | `/rooms/:id/bookings` | `status?`, `from?`, `to?`, `skip?`, `take?` | `200` `BookingResponse[]` |
@@ -431,6 +432,10 @@ export interface UserWithDistanceResponse extends UserResponse {
 `/rooms/availability` is the search endpoint you want for a date-range picker — it returns each room
 with its `available` flag *and* a priced quote in one round trip.
 
+`/rooms/code/:code` resolves the unique, human-readable `Room.code` (`SUONG`, `THONG`, `SUOI`,
+`KHOI`, `QUY`, `DOI`), so a public route can be `/stays/SUONG` instead of a uuid. Unknown code →
+`404` `NOT_FOUND` with the standard error envelope. The lookup is exact and case-sensitive.
+
 ### Tours — `/tours`
 
 | Method | Path | Query / Body | Returns |
@@ -438,6 +443,7 @@ with its `available` flag *and* a priced quote in one round trip.
 | `POST` | `/tours` | `CreateTourDto` | `201` `TourResponse` |
 | `GET` | `/tours` | `skip?`, `take?` | `200` `TourResponse[]` |
 | `GET` | `/tours/availability` | `from`, `to` (**required**), `seats?` | `200` `AvailableDepartureResponse[]` |
+| `GET` | `/tours/slug/:slug` | — | `200` `TourResponse`, `404` when absent |
 | `GET` | `/tours/:id` | — | `200` `TourResponse` |
 | `POST` | `/tours/:id/departures` | `CreateTourDepartureDto` | `201` `TourDepartureResponse` |
 | `GET` | `/tours/:id/departures` | `from?`, `to?` | `200` `TourDepartureResponse[]` |
@@ -449,6 +455,13 @@ with its `available` flag *and* a priced quote in one round trip.
 
 `CreateTourDepartureDto`: `departureDate` (date-only, **not in the past**), `capacity` (≥1),
 `priceOverride?` (integer ≥ 0).
+
+`/tours/slug/:slug` resolves the unique `Tour.slug` (`cau-dat-sunrise`, `pine-and-waterfall`,
+`coffee-hills`), so a public route can be `/journeys/cau-dat-sunrise` instead of a uuid. Unknown
+slug → `404` `NOT_FOUND`.
+
+Route-order note: `/rooms/code/:code` and `/tours/slug/:slug` are declared **before** `/rooms/:id`
+and `/tours/:id`, so a code or slug can never be matched as an id.
 
 ### Price rules — `/price-rules`
 

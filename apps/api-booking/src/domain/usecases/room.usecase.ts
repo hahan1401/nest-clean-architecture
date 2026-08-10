@@ -16,6 +16,11 @@ export interface GetRoomUseCase {
   execute(id: string): Promise<Room>;
 }
 
+/** Lookup by the human-readable `Room.code`, so public URLs need no uuid. */
+export interface GetRoomByCodeUseCase {
+  execute(code: string): Promise<Room>;
+}
+
 export interface SearchAvailableRoomsInput {
   range: DateRange;
   guests?: number;

@@ -14,6 +14,7 @@ import {
   CheckTourAvailabilityService,
   CreateTourDepartureService,
   CreateTourService,
+  GetTourBySlugService,
   GetTourService,
   ListTourBookingsService,
   ListTourDeparturesService,
@@ -28,6 +29,7 @@ export class TourController {
     private readonly createTourService: CreateTourService,
     private readonly listToursService: ListToursService,
     private readonly getTourService: GetTourService,
+    private readonly getTourBySlugService: GetTourBySlugService,
     private readonly createTourDepartureService: CreateTourDepartureService,
     private readonly listTourDeparturesService: ListTourDeparturesService,
     private readonly searchAvailableDeparturesService: SearchAvailableDeparturesService,
@@ -56,6 +58,12 @@ export class TourController {
   @MessagePattern(BOOKING_PATTERNS.GET_TOUR)
   async get(@Payload() data: { id: string }): Promise<TourResponseDto> {
     const tour = await this.getTourService.execute(data.id);
+    return new TourResponseDto(tour);
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.GET_TOUR_BY_SLUG)
+  async getBySlug(@Payload() data: { slug: string }): Promise<TourResponseDto> {
+    const tour = await this.getTourBySlugService.execute(data.slug);
     return new TourResponseDto(tour);
   }
 

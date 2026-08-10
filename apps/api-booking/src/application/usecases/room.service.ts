@@ -14,6 +14,7 @@ import {
   CheckRoomAvailabilityInput,
   CheckRoomAvailabilityUseCase,
   CreateRoomUseCase,
+  GetRoomByCodeUseCase,
   GetRoomUseCase,
   ListRoomBookingsInput,
   ListRoomBookingsUseCase,
@@ -59,6 +60,23 @@ export class GetRoomService implements GetRoomUseCase {
     const room = await this.roomRepository.findById(id);
     if (!room) {
       throw new NotFoundError(`Room with id ${id} not found`);
+    }
+    return room;
+  }
+}
+
+/**
+ * Backs the public `/stays/<code>` URLs. `Room.code` is unique, so this is a
+ * single indexed lookup - no different in cost from the id path.
+ */
+@Injectable()
+export class GetRoomByCodeService implements GetRoomByCodeUseCase {
+  constructor(private readonly roomRepository: RoomRepository) {}
+
+  async execute(code: string): Promise<Room> {
+    const room = await this.roomRepository.findByCode(code);
+    if (!room) {
+      throw new NotFoundError(`Room with code ${code} not found`);
     }
     return room;
   }

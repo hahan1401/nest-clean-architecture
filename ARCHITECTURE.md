@@ -50,7 +50,7 @@ precede a write are pinned to the primary; browse/history reads go to the replic
 ## Repository Layout
 
 ```
-nest-clean-architecture/
+homestay-booking-be/
 ├── apps/
 │   ├── api-gateway/      # HTTP gateway, fans out to every service
 │   ├── api-user/         # User service (TCP)
@@ -403,10 +403,12 @@ Catalogue and availability:
 | Pattern | Payload | Description |
 |---------|---------|-------------|
 | `create_room` / `list_rooms` / `get_room` | room DTO / filter / `{ id }` | Room catalogue |
+| `get_room_by_code` | `{ code }` | One room by its unique human-readable `code` |
 | `search_available_rooms` | `{ from, to, guests?, skip?, take? }` | Free rooms for a window, each with a quote |
 | `check_room_availability` | `{ roomId, from, to }` | One room: available plus its quote |
 | `list_room_bookings` | `{ roomId, status?, from?, to? }` | Full booking history for a room |
 | `create_tour` / `list_tours` / `get_tour` | tour DTO / filter / `{ id }` | Tour catalogue |
+| `get_tour_by_slug` | `{ slug }` | One tour by its unique `slug` |
 | `create_tour_departure` / `list_tour_departures` | `{ tourId, ... }` | Dated, seat-capped departures |
 | `search_available_departures` | `{ from, to, seats, tourId? }` | Departures with enough seats left |
 | `check_tour_availability` | `{ tourId, from, to, seats }` | Same, narrowed to one tour |
@@ -520,11 +522,13 @@ Catalogue and availability:
 |--------|------|---------------|
 | `POST` / `GET` | `/rooms` | `create_room` / `list_rooms` |
 | `GET` | `/rooms/availability?from&to&guests` | `search_available_rooms` |
+| `GET` | `/rooms/code/:code` | `get_room_by_code` |
 | `GET` | `/rooms/:id` | `get_room` |
 | `GET` | `/rooms/:id/availability?from&to` | `check_room_availability` |
 | `GET` | `/rooms/:id/bookings?status&from&to` | `list_room_bookings` |
 | `POST` / `GET` | `/tours` | `create_tour` / `list_tours` |
 | `GET` | `/tours/availability?from&to&seats` | `search_available_departures` |
+| `GET` | `/tours/slug/:slug` | `get_tour_by_slug` |
 | `GET` | `/tours/:id` | `get_tour` |
 | `POST` / `GET` | `/tours/:id/departures` | `create_tour_departure` / `list_tour_departures` |
 | `GET` | `/tours/:id/availability?from&to&seats` | `check_tour_availability` |
@@ -623,10 +627,10 @@ random bytes. The owner's email deliberately does **not** — forwarding it woul
 cancellation credential. The token never appears in an API response.
 
 > ⚠️ **`PUBLIC_BASE_URL` is not prefix-aware.** `ConfirmBookingService` appends the literal
-> `/bookings/cancel/<token>`, so with the default `http://localhost:3000` the emailed link now
-> resolves to a `404` — the route moved to `/api/bookings/cancel/<token>`. Point
-> `PUBLIC_BASE_URL` at the frontend route that fronts this flow (the intended setup), or at
-> `http://localhost:3000/api` if you want the link to hit the gateway directly.
+> `/bookings/cancel/<token>`, so it must name the **frontend** origin — now
+> `http://localhost:4000`, where `/bookings/cancel/<token>` is a real page that renders the
+> booking and only cancels on a button press. Pointing it at the gateway mails out a raw JSON
+> URL (and with the `/api` prefix, a `404` unless you also append `/api`).
 
 > The `GET` half of the cancel route **must stay side-effect free.** Mail clients, corporate
 > scanners and link-preview bots fetch every URL in a message, so a state-changing `GET` would
@@ -769,7 +773,7 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 | `EMAIL_FROM` | - (required) | api-email (fallback sender; api-booking leaves `from` unset) |
 | `AWS_SES_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | - | api-email |
 | `HOMESTAY_OWNER_EMAIL` | - (required) | api-booking |
-| `PUBLIC_BASE_URL` | `http://localhost:3000` | api-booking (builds the emailed cancel link; append `/api` to hit the gateway directly) |
+| `PUBLIC_BASE_URL` | `http://localhost:4000` | api-booking (builds the emailed cancel link; must be the **frontend** origin, not the gateway) |
 | `EMAIL_EMIT_TIMEOUT_MS` | `2000` | api-booking |
 | `BOOKING_HOLD_TTL_MINUTES` | `30` | api-booking |
 | `HOLD_SWEEP_CRON` | `*/10 * * * *` | api-booking |

@@ -16,6 +16,7 @@ import {
   CheckTourAvailabilityUseCase,
   CreateTourDepartureUseCase,
   CreateTourUseCase,
+  GetTourBySlugUseCase,
   GetTourUseCase,
   ListTourBookingsInput,
   ListTourBookingsUseCase,
@@ -57,6 +58,23 @@ export class GetTourService implements GetTourUseCase {
     const tour = await this.tourRepository.findById(id);
     if (!tour) {
       throw new NotFoundError(`Tour with id ${id} not found`);
+    }
+    return tour;
+  }
+}
+
+/**
+ * Backs the public `/journeys/<slug>` URLs. `Tour.slug` is unique, so this is a
+ * single indexed lookup - no different in cost from the id path.
+ */
+@Injectable()
+export class GetTourBySlugService implements GetTourBySlugUseCase {
+  constructor(private readonly tourRepository: TourRepository) {}
+
+  async execute(slug: string): Promise<Tour> {
+    const tour = await this.tourRepository.findBySlug(slug);
+    if (!tour) {
+      throw new NotFoundError(`Tour with slug ${slug} not found`);
     }
     return tour;
   }

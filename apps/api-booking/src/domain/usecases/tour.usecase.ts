@@ -16,6 +16,11 @@ export interface GetTourUseCase {
   execute(id: string): Promise<Tour>;
 }
 
+/** Lookup by the human-readable `Tour.slug`, so public URLs need no uuid. */
+export interface GetTourBySlugUseCase {
+  execute(slug: string): Promise<Tour>;
+}
+
 export interface CreateTourDepartureUseCase {
   execute(data: CreateTourDepartureData): Promise<TourDeparture>;
 }
