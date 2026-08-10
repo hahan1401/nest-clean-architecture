@@ -8,7 +8,14 @@ import {
   ExpireStaleHoldsService,
 } from '../../application/usecases/maintenance.service';
 
-const DEFAULT_HOLD_SWEEP_CRON = '*/10 * * * *';
+/**
+ * Every minute, not every ten. A PENDING booking keeps holding its slot until
+ * this sweep flips it to EXPIRED - SLOT_HOLDING_STATUSES includes PENDING, and
+ * availability never looks at hold_expires_at - so the sweep interval is added
+ * to every hold. At a 3 minute TTL, a ten minute sweep would block the room for
+ * up to thirteen.
+ */
+const DEFAULT_HOLD_SWEEP_CRON = '* * * * *';
 const DEFAULT_DAILY_MAINTENANCE_CRON = '5 0 * * *';
 
 /**

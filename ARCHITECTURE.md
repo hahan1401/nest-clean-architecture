@@ -834,8 +834,8 @@ Production** — refresh tokens issued while it sits in *Testing* expire after 7
 | `PUBLIC_BASE_URL` | `http://localhost:4000` | api-booking (builds the emailed cancel link; must be the **frontend** origin, not the gateway) |
 | `EMAIL_EMIT_TIMEOUT_MS` | `2000` | api-booking |
 | `EMAIL_PROVIDER` | `ses` (`ses` \| `gmail`) | api-booking (picks the routing key for booking emails; an unknown value fails at boot) |
-| `BOOKING_HOLD_TTL_MINUTES` | `30` | api-booking |
-| `HOLD_SWEEP_CRON` | `*/10 * * * *` | api-booking |
+| `BOOKING_HOLD_TTL_MINUTES` | `3` | api-booking |
+| `HOLD_SWEEP_CRON` | `* * * * *` | api-booking |
 | `DAILY_MAINTENANCE_CRON` | `5 0 * * *` | api-booking |
 | `vnp_HashSecret` / `vnp_TmnCode` | - | api-payment |
 | `VNPAY_RETURN_URL` / `VNPAY_IP_ADDR` | optional | api-payment |

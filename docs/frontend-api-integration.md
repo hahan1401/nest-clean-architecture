@@ -595,7 +595,7 @@ The one flow worth walking through end to end, because its states are visible to
    POST /bookings/quote                    ← firm price, no slot held  (200)
               │
    POST /bookings                          ← PENDING, slot HELD        (201)
-              │                              holdExpiresAt ≈ now + 30 min
+              │                              holdExpiresAt ≈ now + 3 min
        ┌──────┴───────┬─────────────────┐
        ▼              ▼                 ▼
    /confirm       /cancel          hold expires
@@ -608,7 +608,7 @@ The one flow worth walking through end to end, because its states are visible to
 **1 — Quote.** `POST /bookings/quote` prices a room stay or a departure without touching
 availability. Use it to show a breakdown before the customer commits. It holds nothing.
 
-**2 — Create.** `POST /bookings` returns a `PENDING` booking with `holdExpiresAt` (default 30
+**2 — Create.** `POST /bookings` returns a `PENDING` booking with `holdExpiresAt` (default 3
 minutes, `BOOKING_HOLD_TTL_MINUTES`). The slot is genuinely held from this moment. Render a
 countdown from `holdExpiresAt`; when it lapses, stop offering "confirm" and re-check availability —
 a background sweep flips the row to `EXPIRED`, but the sweep runs on a cron (~10 min), so a booking

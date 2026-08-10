@@ -244,3 +244,54 @@ describe('CreateBookingService', () => {
     });
   });
 });
+
+describe('hold TTL', () => {
+  const buildWith = (ttlMinutes: number | undefined) => {
+    const bookingRepository = {
+      createRoomBooking: jest.fn().mockResolvedValue(new Booking({ id: 1 })),
+    } as unknown as jest.Mocked<BookingRepository>;
+    const roomRepository = {
+      findById: jest.fn().mockResolvedValue(room()),
+    } as unknown as jest.Mocked<RoomRepository>;
+    const pricing = {
+      quoteRoomStay: jest.fn().mockResolvedValue(quote(900_000)),
+      quoteTourSeats: jest.fn(),
+    };
+    const configService = {
+      get: jest.fn((key: string) => (key === 'BOOKING_HOLD_TTL_MINUTES' ? ttlMinutes : undefined)),
+    } as unknown as jest.Mocked<ConfigService>;
+
+    return {
+      bookingRepository,
+      service: new CreateBookingService(
+        bookingRepository,
+        roomRepository,
+        {} as jest.Mocked<TourRepository>,
+        {} as jest.Mocked<TourDepartureRepository>,
+        pricing,
+        configService,
+      ),
+    };
+  };
+
+  const heldMinutes = (bookingRepository: jest.Mocked<BookingRepository>): number => {
+    const [data] = bookingRepository.createRoomBooking.mock.calls[0];
+    return Math.round((data.holdExpiresAt.getTime() - Date.now()) / 60_000);
+  };
+
+  it('holds the slot for 3 minutes by default', async () => {
+    const { service, bookingRepository } = buildWith(undefined);
+
+    await service.execute(roomInput());
+
+    expect(heldMinutes(bookingRepository)).toBe(3);
+  });
+
+  it('honours BOOKING_HOLD_TTL_MINUTES when set', async () => {
+    const { service, bookingRepository } = buildWith(15);
+
+    await service.execute(roomInput());
+
+    expect(heldMinutes(bookingRepository)).toBe(15);
+  });
+});

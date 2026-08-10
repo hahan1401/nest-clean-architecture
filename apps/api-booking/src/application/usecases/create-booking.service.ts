@@ -19,7 +19,7 @@ import {
 import { CreateBookingInput, CreateBookingUseCase } from '../../domain/usecases/booking.usecase';
 import { assertUsableRange } from './room.service';
 
-const DEFAULT_HOLD_TTL_MINUTES = 30;
+const DEFAULT_HOLD_TTL_MINUTES = 3;
 
 /**
  * Creates a PENDING booking that holds its slot until confirmed or swept.
