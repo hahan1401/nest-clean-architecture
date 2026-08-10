@@ -1,12 +1,13 @@
-import { PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '@app/database';
+import { BookingStatus, PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '@app/database';
 import { Inject, Injectable } from '@nestjs/common';
+import type { RoomAvailabilityState, RoomOffer } from '../../domain/models/availability';
 import { DateRange } from '../../domain/models/date-range';
 import {
   CreateRoomData,
   RoomListFilter,
   RoomRepository,
 } from '../../domain/repositories/room.repository';
-import { SLOT_HOLDING_STATUSES } from './booking-status.constants';
+import { BOOKED_STATUSES, SLOT_HOLDING_STATUSES } from './booking-status.constants';
 
 @Injectable()
 export class PrismaRoomRepository extends RoomRepository {
@@ -52,24 +53,33 @@ export class PrismaRoomRepository extends RoomRepository {
    * to the '[)' daterange in bookings_room_no_overlap, so this can never
    * disagree with the constraint.
    */
-  async findAvailable(range: DateRange, filter: RoomListFilter): Promise<Room[]> {
+  async findAvailable(range: DateRange, filter: RoomListFilter): Promise<RoomOffer[]> {
+    const overlaps = { checkIn: { lt: range.to }, checkOut: { gt: range.from } };
+
     const rooms = await this.prisma.$replica().room.findMany({
       where: {
         isActive: filter.isActive ?? true,
         maxGuests: filter.guests ? { gte: filter.guests } : undefined,
+        // Only genuinely sold rooms are excluded. A PENDING overlap is reported
+        // rather than hidden, so a guest can wait the hold out.
+        bookings: { none: { status: { in: [...BOOKED_STATUSES] }, ...overlaps } },
+      },
+      include: {
         bookings: {
-          none: {
-            status: { in: [...SLOT_HOLDING_STATUSES] },
-            checkIn: { lt: range.to },
-            checkOut: { gt: range.from },
-          },
+          where: { status: BookingStatus.PENDING, ...overlaps },
+          select: { holdExpiresAt: true },
         },
       },
       orderBy: [{ basePrice: 'asc' }, { name: 'asc' }],
       skip: filter.skip,
       take: filter.take,
     });
-    return rooms.map((room) => new Room(room));
+
+    return rooms.map(({ bookings, ...room }) => ({
+      room: new Room(room),
+      held: bookings.length > 0,
+      heldUntil: latestHoldExpiry(bookings),
+    }));
   }
 
   /**
@@ -77,16 +87,48 @@ export class PrismaRoomRepository extends RoomRepository {
    * immediately before a booking write, and replication lag would report a room
    * as free that was taken 200ms ago.
    */
-  async isAvailable(roomId: number, range: DateRange): Promise<boolean> {
-    const clash = await this.prisma.$primary().booking.findFirst({
+  async checkAvailability(
+    roomId: number,
+    range: DateRange,
+  ): Promise<{ state: RoomAvailabilityState; heldUntil: Date | null }> {
+    const clashes = await this.prisma.$primary().booking.findMany({
       where: {
         roomId,
+        // Still the full slot-holding list: this answers "may a write proceed",
+        // and PENDING blocks the exclusion constraint just as CONFIRMED does.
         status: { in: [...SLOT_HOLDING_STATUSES] },
         checkIn: { lt: range.to },
         checkOut: { gt: range.from },
       },
-      select: { id: true },
+      select: { status: true, holdExpiresAt: true },
     });
-    return clash === null;
+
+    if (clashes.length === 0) {
+      return { state: 'AVAILABLE', heldUntil: null };
+    }
+
+    // A single sold night outranks any number of holds: the window as a whole
+    // cannot free up, however the holds resolve.
+    if (clashes.some((clash) => clash.status !== BookingStatus.PENDING)) {
+      return { state: 'BOOKED', heldUntil: null };
+    }
+
+    return { state: 'ON_HOLD', heldUntil: latestHoldExpiry(clashes) };
   }
+}
+
+/**
+ * The window frees up only when the last overlapping hold lapses, so this takes
+ * the maximum rather than the soonest. Null when nothing carries an expiry.
+ */
+function latestHoldExpiry(holds: Array<{ holdExpiresAt: Date | null }>): Date | null {
+  const expiries = holds
+    .map((hold) => hold.holdExpiresAt)
+    .filter((expiry): expiry is Date => expiry !== null);
+
+  if (expiries.length === 0) {
+    return null;
+  }
+
+  return new Date(Math.max(...expiries.map((expiry) => expiry.getTime())));
 }

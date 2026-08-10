@@ -304,10 +304,15 @@ export interface PriceQuoteResponse {
   lines: PriceQuoteLineResponse[];
 }
 
+/** AVAILABLE = bookable now. ON_HOLD = another guest is mid-checkout. BOOKED = sold. */
+export type RoomAvailabilityState = 'AVAILABLE' | 'ON_HOLD' | 'BOOKED';
+
 export interface RoomAvailabilityResponse {
   room: RoomResponse;
-  available: boolean;
-  quote: PriceQuoteResponse | null;   // null when unavailable
+  available: boolean;                 // true only for AVAILABLE
+  state: RoomAvailabilityState;
+  heldUntil: string | null;           // ISO timestamp; set only when state is ON_HOLD
+  quote: PriceQuoteResponse | null;   // priced for AVAILABLE and ON_HOLD, null for BOOKED
 }
 
 export interface TourResponse {
@@ -431,6 +436,32 @@ export interface UserWithDistanceResponse extends UserResponse {
 
 `/rooms/availability` is the search endpoint you want for a date-range picker — it returns each room
 with its `available` flag *and* a priced quote in one round trip.
+
+**Held rooms are included in the results.** A room another guest is mid-checkout on comes back with
+`state: 'ON_HOLD'`, `available: false`, and `heldUntil` — the moment that hold lapses. Sold rooms
+(`CONFIRMED`/`COMPLETED`) are omitted from the search entirely; they are not coming back for those
+dates. So every row in the response is either bookable now or bookable again soon:
+
+```tsx
+{rooms.map((r) =>
+  r.state === 'ON_HOLD' ? (
+    <RoomCard room={r.room} quote={r.quote} disabled
+      badge={`Someone is booking this — free again at ${new Date(r.heldUntil!).toLocaleTimeString()}`} />
+  ) : (
+    <RoomCard room={r.room} quote={r.quote} onBook={() => book(r.room.id)} />
+  ),
+)}
+```
+
+Do not send a booking for an `ON_HOLD` room: the exclusion constraint rejects it with a `409`, which
+is correct but reads to the guest as a failure rather than a queue. Re-run the search after
+`heldUntil` instead — a lapsed hold is swept within a minute, after which the room turns
+`AVAILABLE`. Treat `heldUntil` as a hint, not a promise: the holder may still confirm, in which case
+the room leaves the results entirely on the next search.
+
+The single-room endpoint `/rooms/:id/availability` reports the same three states, so a deep link to a
+held room can show the same "free again at …" affordance. An inactive (retired) room reports `BOOKED`
+rather than `ON_HOLD` — there is nothing to wait for.
 
 `/rooms/code/:code` resolves the unique, human-readable `Room.code` (`SUONG`, `THONG`, `SUOI`,
 `KHOI`, `QUY`, `DOI`), so a public route can be `/stays/SUONG` instead of a numeric id. Unknown code →

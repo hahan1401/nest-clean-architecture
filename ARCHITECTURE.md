@@ -414,8 +414,8 @@ Catalogue and availability:
 |---------|---------|-------------|
 | `create_room` / `list_rooms` / `get_room` | room DTO / filter / `{ id }` | Room catalogue |
 | `get_room_by_code` | `{ code }` | One room by its unique human-readable `code` |
-| `search_available_rooms` | `{ from, to, guests?, skip?, take? }` | Free rooms for a window, each with a quote |
-| `check_room_availability` | `{ roomId, from, to }` | One room: available plus its quote |
+| `search_available_rooms` | `{ from, to, guests?, skip?, take? }` | Free **and held** rooms for a window, each with a state and a quote |
+| `check_room_availability` | `{ roomId, from, to }` | One room: `AVAILABLE` / `ON_HOLD` (with `heldUntil`) / `BOOKED`, plus its quote |
 | `list_room_bookings` | `{ roomId, status?, from?, to? }` | Full booking history for a room |
 | `create_tour` / `list_tours` / `get_tour` | tour DTO / filter / `{ id }` | Tour catalogue |
 | `get_tour_by_slug` | `{ slug }` | One tour by its unique `slug` |

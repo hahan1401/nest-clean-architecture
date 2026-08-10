@@ -68,15 +68,32 @@ export class PriceQuoteResponseDto {
   }
 }
 
+/**
+ * Why a room can or cannot be taken for a window. ON_HOLD means another guest is
+ * mid-checkout: not bookable now, but not sold either.
+ */
+export type RoomAvailabilityState = 'AVAILABLE' | 'ON_HOLD' | 'BOOKED';
+
 /** A room paired with whether it is free for the requested window, and at what price. */
 export class RoomAvailabilityResponseDto {
   room: RoomResponseDto;
+  /** True only for AVAILABLE. Branch on `state` when you need to tell held from sold. */
   available: boolean;
+  state: RoomAvailabilityState;
+  /** ISO timestamp the blocking hold lapses; null unless `state` is ON_HOLD. */
+  heldUntil: Date | null;
   quote: PriceQuoteResponseDto | null;
 
-  constructor(room: Room, available: boolean, quote: PriceQuote | null) {
+  constructor(
+    room: Room,
+    state: RoomAvailabilityState,
+    quote: PriceQuote | null,
+    heldUntil: Date | null = null,
+  ) {
     this.room = new RoomResponseDto(room);
-    this.available = available;
+    this.available = state === 'AVAILABLE';
+    this.state = state;
+    this.heldUntil = heldUntil;
     this.quote = quote ? new PriceQuoteResponseDto(quote) : null;
   }
 }

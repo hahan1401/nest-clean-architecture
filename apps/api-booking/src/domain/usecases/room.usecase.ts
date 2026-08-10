@@ -1,4 +1,4 @@
-import type { Booking, PriceQuote, Room } from '@app/database';
+import type { Booking, Room } from '@app/database';
 import type { RoomAvailability } from '../models/availability';
 import type { DateRange } from '../models/date-range';
 import type { BookingHistoryFilter } from '../repositories/booking.repository';
@@ -29,7 +29,8 @@ export interface SearchAvailableRoomsInput {
 }
 
 export interface SearchAvailableRoomsUseCase {
-  execute(input: SearchAvailableRoomsInput): Promise<Array<{ room: Room; quote: PriceQuote }>>;
+  /** Free rooms and held ones; sold rooms are left out entirely. */
+  execute(input: SearchAvailableRoomsInput): Promise<RoomAvailability[]>;
 }
 
 export interface CheckRoomAvailabilityInput {

@@ -78,7 +78,8 @@ export class RoomController {
       take: data.take,
     });
     return results.map(
-      (result) => new RoomAvailabilityResponseDto(result.room, true, result.quote),
+      (result) =>
+        new RoomAvailabilityResponseDto(result.room, result.state, result.quote, result.heldUntil),
     );
   }
 
@@ -90,7 +91,12 @@ export class RoomController {
       roomId: data.roomId,
       range: toDateRange(data.from, data.to),
     });
-    return new RoomAvailabilityResponseDto(result.room, result.available, result.quote);
+    return new RoomAvailabilityResponseDto(
+      result.room,
+      result.state,
+      result.quote,
+      result.heldUntil,
+    );
   }
 
   @MessagePattern(BOOKING_PATTERNS.LIST_ROOM_BOOKINGS)

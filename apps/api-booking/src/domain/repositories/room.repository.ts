@@ -1,4 +1,5 @@
 import type { Room } from '@app/database';
+import type { RoomAvailabilityState, RoomOffer } from '../models/availability';
 import type { DateRange } from '../models/date-range';
 import type { ListRange } from '../models/pagination';
 
@@ -21,9 +22,16 @@ export abstract class RoomRepository {
   abstract findByCode(code: string): Promise<Room | null>;
   abstract findMany(filter: RoomListFilter): Promise<Room[]>;
 
-  /** Rooms with no slot-holding booking overlapping `range`. */
-  abstract findAvailable(range: DateRange, filter: RoomListFilter): Promise<Room[]>;
+  /**
+   * Rooms that are not sold for `range`: free ones, plus ones a pending booking
+   * is holding, flagged with when that hold lapses. Rooms with a CONFIRMED or
+   * COMPLETED overlap are excluded outright - those are not coming back.
+   */
+  abstract findAvailable(range: DateRange, filter: RoomListFilter): Promise<RoomOffer[]>;
 
-  /** True when no slot-holding booking overlaps `range` for this room. */
-  abstract isAvailable(roomId: number, range: DateRange): Promise<boolean>;
+  /** Whether this room is free, held, or sold for `range`. */
+  abstract checkAvailability(
+    roomId: number,
+    range: DateRange,
+  ): Promise<{ state: RoomAvailabilityState; heldUntil: Date | null }>;
 }

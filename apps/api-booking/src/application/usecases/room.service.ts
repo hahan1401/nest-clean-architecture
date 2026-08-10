@@ -1,5 +1,5 @@
 import { ConflictError, NotFoundError, ValidationError } from '@app/common';
-import { Booking, PriceQuote, Room } from '@app/database';
+import { Booking, Room } from '@app/database';
 import { Injectable } from '@nestjs/common';
 import { RoomAvailability } from '../../domain/models/availability';
 import { DateRange } from '../../domain/models/date-range';
@@ -89,22 +89,25 @@ export class SearchAvailableRoomsService implements SearchAvailableRoomsUseCase 
     private readonly pricing: PricingPort,
   ) {}
 
-  async execute(
-    input: SearchAvailableRoomsInput,
-  ): Promise<Array<{ room: Room; quote: PriceQuote }>> {
+  async execute(input: SearchAvailableRoomsInput): Promise<RoomAvailability[]> {
     assertUsableRange(input.range);
 
-    const rooms = await this.roomRepository.findAvailable(input.range, {
+    const offers = await this.roomRepository.findAvailable(input.range, {
       guests: input.guests,
       isActive: true,
       skip: input.skip,
       take: input.take,
     });
 
+    // Held rooms are priced too: someone deciding whether to wait out a hold
+    // needs to know what they would be waiting for.
     return Promise.all(
-      rooms.map(async (room) => ({
-        room,
-        quote: await this.pricing.quoteRoomStay(room, input.range),
+      offers.map(async (offer) => ({
+        room: offer.room,
+        available: !offer.held,
+        state: offer.held ? ('ON_HOLD' as const) : ('AVAILABLE' as const),
+        heldUntil: offer.heldUntil,
+        quote: await this.pricing.quoteRoomStay(offer.room, input.range),
       })),
     );
   }
@@ -125,15 +128,17 @@ export class CheckRoomAvailabilityService implements CheckRoomAvailabilityUseCas
       throw new NotFoundError(`Room with id ${input.roomId} not found`);
     }
 
-    const available =
-      room.isActive && (await this.roomRepository.isAvailable(room.id, input.range));
+    // A retired room is never coming back for this window, so it reads as BOOKED
+    // rather than held - there is nothing to wait for.
+    const { state, heldUntil } = room.isActive
+      ? await this.roomRepository.checkAvailability(room.id, input.range)
+      : { state: 'BOOKED' as const, heldUntil: null };
 
-    // No point pricing a room nobody can take.
-    return {
-      room,
-      available,
-      quote: available ? await this.pricing.quoteRoomStay(room, input.range) : null,
-    };
+    // No point pricing a room nobody can ever take; a held one is still worth
+    // pricing, because the guest may come back for it.
+    const quote = state === 'BOOKED' ? null : await this.pricing.quoteRoomStay(room, input.range);
+
+    return { room, available: state === 'AVAILABLE', state, heldUntil, quote };
   }
 }
 

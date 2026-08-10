@@ -44,7 +44,7 @@ future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
 | | |
 |---|---|
 | **Catalogue** | Rooms with a nightly base price and a guest cap; tours with a per-person price and dated, seat-capped departures. |
-| **Availability** | Free rooms for an arrival/departure window, or departures with enough seats left — each answer carries its own price quote. |
+| **Availability** | Free rooms for an arrival/departure window, or departures with enough seats left — each answer carries its own price quote. A room another guest is mid-checkout on still appears, marked `ON_HOLD` with the time its hold lapses, so a guest can come back for it rather than assume it is gone. |
 | **Pricing** | `PriceRule` overrides per room or tour, by date window and/or weekday, resolved by a pure function and then **frozen** into `booking_lines`. Later price edits never rewrite history. |
 | **Holds** | `POST /api/bookings` genuinely reserves the slot for 3 minutes and returns `holdExpiresAt`. A cron sweep expires what lapses. |
 | **Confirmation** | `PENDING → CONFIRMED` commits before the broker is touched, then fires two emails through RabbitMQ → AWS SES. |
