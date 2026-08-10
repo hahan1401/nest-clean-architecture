@@ -13,10 +13,10 @@ export interface ListToursUseCase {
 }
 
 export interface GetTourUseCase {
-  execute(id: string): Promise<Tour>;
+  execute(id: number): Promise<Tour>;
 }
 
-/** Lookup by the human-readable `Tour.slug`, so public URLs need no uuid. */
+/** Lookup by the human-readable `Tour.slug`, so public URLs need no numeric id. */
 export interface GetTourBySlugUseCase {
   execute(slug: string): Promise<Tour>;
 }
@@ -26,7 +26,7 @@ export interface CreateTourDepartureUseCase {
 }
 
 export interface ListTourDeparturesInput {
-  tourId: string;
+  tourId: number;
   range?: DateRange;
 }
 
@@ -37,7 +37,7 @@ export interface ListTourDeparturesUseCase {
 export interface SearchAvailableDeparturesInput {
   range: DateRange;
   seats: number;
-  tourId?: string;
+  tourId?: number;
 }
 
 export interface SearchAvailableDeparturesUseCase {
@@ -46,12 +46,12 @@ export interface SearchAvailableDeparturesUseCase {
 
 export interface CheckTourAvailabilityUseCase {
   execute(
-    input: SearchAvailableDeparturesInput & { tourId: string },
+    input: SearchAvailableDeparturesInput & { tourId: number },
   ): Promise<AvailableDeparture[]>;
 }
 
 export interface ListTourBookingsInput {
-  tourId: string;
+  tourId: number;
   filter: BookingHistoryFilter;
 }
 

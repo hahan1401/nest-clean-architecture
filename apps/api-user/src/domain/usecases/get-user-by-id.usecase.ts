@@ -1,5 +1,5 @@
 import { User } from '@app/database';
 
 export interface GetUserByIdUseCase {
-  execute(id: string): Promise<User | null>;
+  execute(id: number): Promise<User | null>;
 }

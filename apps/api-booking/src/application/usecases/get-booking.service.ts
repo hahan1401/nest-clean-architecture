@@ -11,7 +11,7 @@ import {
 export class GetBookingService implements GetBookingUseCase {
   constructor(private readonly bookingRepository: BookingRepository) {}
 
-  async execute(id: string): Promise<Booking> {
+  async execute(id: number): Promise<Booking> {
     const booking = await this.bookingRepository.findById(id);
     if (!booking) {
       throw new NotFoundError(`Booking with id ${id} not found`);

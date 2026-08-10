@@ -22,12 +22,12 @@ describe('UpdateLocationService', () => {
   it('throws when the user does not exist', async () => {
     userRepository.findById.mockResolvedValue(null);
 
-    await expect(service.execute('missing', 1, 2)).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.execute(999, 1, 2)).rejects.toBeInstanceOf(NotFoundError);
     expect(geocodingClient.reverseGeocode).not.toHaveBeenCalled();
   });
 
   it('builds the location name from the geocoding result', async () => {
-    const user = new User({ id: 'u1' });
+    const user = new User({ id: 1 });
     userRepository.findById.mockResolvedValue(user);
     geocodingClient.reverseGeocode.mockResolvedValue({
       addresstype: 'amenity',
@@ -35,10 +35,10 @@ describe('UpdateLocationService', () => {
     } as NominatimResponse);
     userRepository.updateLocation.mockResolvedValue(user);
 
-    await service.execute('u1', 21, 105);
+    await service.execute(1, 21, 105);
 
     expect(userRepository.updateLocation).toHaveBeenCalledWith(
-      'u1',
+      1,
       21,
       105,
       'Ward 1, Hanoi, Vietnam',
@@ -46,13 +46,13 @@ describe('UpdateLocationService', () => {
   });
 
   it('falls back to null location name when geocoding fails', async () => {
-    const user = new User({ id: 'u1' });
+    const user = new User({ id: 1 });
     userRepository.findById.mockResolvedValue(user);
     geocodingClient.reverseGeocode.mockResolvedValue(null);
     userRepository.updateLocation.mockResolvedValue(user);
 
-    await service.execute('u1', 21, 105);
+    await service.execute(1, 21, 105);
 
-    expect(userRepository.updateLocation).toHaveBeenCalledWith('u1', 21, 105, null);
+    expect(userRepository.updateLocation).toHaveBeenCalledWith(1, 21, 105, null);
   });
 });

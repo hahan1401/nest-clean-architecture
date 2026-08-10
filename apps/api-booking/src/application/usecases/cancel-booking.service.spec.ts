@@ -12,12 +12,12 @@ const TOKEN = 'a'.repeat(64);
 
 const booking = (overrides: Partial<Booking> = {}): Booking =>
   new Booking({
-    id: 'b1',
+    id: 1,
     reference: 'BK-7F3K9Q2A',
     cancellationToken: TOKEN,
     type: 'ROOM',
     status: BookingStatus.CONFIRMED,
-    roomId: 'room-1',
+    roomId: 1,
     // Far future so the "already started" guard does not fire by default.
     checkIn: new Date('2099-02-13'),
     checkOut: new Date('2099-02-16'),
@@ -49,18 +49,18 @@ describe('CancelBookingService', () => {
   it('throws NotFound for an unknown booking', async () => {
     bookingRepository.findById.mockResolvedValue(null);
 
-    await expect(service.execute({ bookingId: 'missing' })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.execute({ bookingId: 999 })).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('cancels a confirmed booking', async () => {
     bookingRepository.findById.mockResolvedValue(booking());
     bookingRepository.markCancelled.mockResolvedValue(booking({ status: BookingStatus.CANCELLED }));
 
-    const result = await service.execute({ bookingId: 'b1', reason: 'plans changed' });
+    const result = await service.execute({ bookingId: 1, reason: 'plans changed' });
 
     expect(result.status).toBe(BookingStatus.CANCELLED);
     expect(bookingRepository.markCancelled).toHaveBeenCalledWith(
-      'b1',
+      1,
       expect.any(Date),
       'plans changed',
     );
@@ -69,21 +69,21 @@ describe('CancelBookingService', () => {
   it('throws Conflict on a second cancel', async () => {
     bookingRepository.findById.mockResolvedValue(booking({ status: BookingStatus.CANCELLED }));
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
     expect(bookingRepository.markCancelled).not.toHaveBeenCalled();
   });
 
   it('throws Conflict for a completed booking', async () => {
     bookingRepository.findById.mockResolvedValue(booking({ status: BookingStatus.COMPLETED }));
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
   });
 
   it('throws Conflict when it loses the race to the conditional update', async () => {
     bookingRepository.findById.mockResolvedValue(booking());
     bookingRepository.markCancelled.mockResolvedValue(null);
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
   });
 });
 
@@ -137,7 +137,7 @@ describe('CancelBookingByTokenService', () => {
 
     expect(result.status).toBe(BookingStatus.CANCELLED);
     expect(bookingRepository.markCancelled).toHaveBeenCalledWith(
-      'b1',
+      1,
       expect.any(Date),
       'Cancelled by customer',
     );

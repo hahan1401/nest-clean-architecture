@@ -5,7 +5,7 @@ import { GetTourBySlugService } from './tour.service';
 
 const tour = (overrides: Partial<Tour> = {}): Tour =>
   new Tour({
-    id: '33333333-3333-4333-8333-000000000001',
+    id: 1,
     slug: 'cau-dat-sunrise',
     name: 'Sunrise over the Cầu Đất tea terraces',
     description: 'Leave in the dark, arrive as the fog burns off the rows.',

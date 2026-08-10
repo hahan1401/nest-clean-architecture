@@ -11,12 +11,12 @@ export interface ListPriceRulesUseCase {
 }
 
 export interface DeletePriceRuleUseCase {
-  execute(id: string): Promise<void>;
+  execute(id: number): Promise<void>;
 }
 
 export type QuotePriceInput =
-  | { type: 'ROOM'; roomId: string; range: DateRange }
-  | { type: 'TOUR'; tourDepartureId: string; seats: number };
+  | { type: 'ROOM'; roomId: number; range: DateRange }
+  | { type: 'TOUR'; tourDepartureId: number; seats: number };
 
 export interface QuotePriceUseCase {
   execute(input: QuotePriceInput): Promise<PriceQuote>;

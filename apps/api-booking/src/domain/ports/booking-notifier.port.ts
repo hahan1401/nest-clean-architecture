@@ -1,5 +1,5 @@
 export interface BookingNotificationBase {
-  bookingId: string;
+  bookingId: number;
   reference: string;
   customerName: string;
   customerEmail: string;

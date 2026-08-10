@@ -9,12 +9,12 @@ import { ConfirmBookingService } from './confirm-booking.service';
 
 const booking = (overrides: Partial<Booking> = {}): Booking =>
   new Booking({
-    id: 'b1',
+    id: 1,
     reference: 'BK-7F3K9Q2A',
     cancellationToken: 'tok-abc',
     type: 'ROOM',
     status: BookingStatus.PENDING,
-    roomId: 'room-1',
+    roomId: 1,
     checkIn: new Date('2027-02-13'),
     checkOut: new Date('2027-02-16'),
     guests: 2,
@@ -63,7 +63,7 @@ describe('ConfirmBookingService', () => {
   it('throws NotFound and sends nothing when the booking does not exist', async () => {
     bookingRepository.findDetailedById.mockResolvedValue(null);
 
-    await expect(service.execute({ bookingId: 'missing' })).rejects.toBeInstanceOf(NotFoundError);
+    await expect(service.execute({ bookingId: 999 })).rejects.toBeInstanceOf(NotFoundError);
     expect(bookingRepository.markConfirmed).not.toHaveBeenCalled();
     expect(notifier.notifyBookingConfirmed).not.toHaveBeenCalled();
   });
@@ -73,7 +73,7 @@ describe('ConfirmBookingService', () => {
       detail({ status: BookingStatus.CONFIRMED }),
     );
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
     expect(notifier.notifyBookingConfirmed).not.toHaveBeenCalled();
   });
 
@@ -82,7 +82,7 @@ describe('ConfirmBookingService', () => {
       detail({ status: BookingStatus.CANCELLED }),
     );
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
     expect(notifier.notifyBookingConfirmed).not.toHaveBeenCalled();
   });
 
@@ -92,7 +92,7 @@ describe('ConfirmBookingService', () => {
       booking({ status: BookingStatus.CONFIRMED, confirmedAt: new Date('2027-01-05') }),
     );
 
-    await service.execute({ bookingId: 'b1' });
+    await service.execute({ bookingId: 1 });
 
     // Ordering is the whole point: the broker must never be able to influence
     // a row that has not been committed yet.
@@ -106,7 +106,7 @@ describe('ConfirmBookingService', () => {
     // The conditional UPDATE matched no rows: another request confirmed first.
     bookingRepository.markConfirmed.mockResolvedValue(null);
 
-    await expect(service.execute({ bookingId: 'b1' })).rejects.toBeInstanceOf(ConflictError);
+    await expect(service.execute({ bookingId: 1 })).rejects.toBeInstanceOf(ConflictError);
     expect(notifier.notifyBookingConfirmed).not.toHaveBeenCalled();
   });
 
@@ -118,7 +118,7 @@ describe('ConfirmBookingService', () => {
     // customer to retry straight into a 409.
     notifier.notifyBookingConfirmed.mockRejectedValue(new Error('broker down'));
 
-    const result = await service.execute({ bookingId: 'b1' });
+    const result = await service.execute({ bookingId: 1 });
 
     expect(result.status).toBe(BookingStatus.CONFIRMED);
     expect(logger.error).toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe('ConfirmBookingService', () => {
       booking({ status: BookingStatus.CONFIRMED, confirmedAt: new Date('2027-01-05') }),
     );
 
-    await service.execute({ bookingId: 'b1', requestId: 'req-1' });
+    await service.execute({ bookingId: 1, requestId: 'req-1' });
 
     expect(notifier.notifyBookingConfirmed).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -20,12 +20,12 @@ interface CreateBookingCommon {
 }
 
 export interface CreateRoomBookingData extends CreateBookingCommon {
-  roomId: string;
+  roomId: number;
   range: DateRange;
 }
 
 export interface CreateTourBookingData extends CreateBookingCommon {
-  tourDepartureId: string;
+  tourDepartureId: number;
   seats: number;
 }
 
@@ -51,29 +51,29 @@ export abstract class BookingRepository {
    */
   abstract createTourBooking(data: CreateTourBookingData): Promise<Booking | null>;
 
-  abstract findById(id: string): Promise<Booking | null>;
+  abstract findById(id: number): Promise<Booking | null>;
   abstract findByReference(reference: string): Promise<Booking | null>;
   abstract findByCancellationToken(token: string): Promise<Booking | null>;
 
   /** Booking plus the labels the confirmation emails need, in one query. */
-  abstract findDetailedById(id: string): Promise<BookingDetail | null>;
+  abstract findDetailedById(id: number): Promise<BookingDetail | null>;
 
-  abstract findByRoom(roomId: string, filter: BookingHistoryFilter): Promise<Booking[]>;
-  abstract findByTour(tourId: string, filter: BookingHistoryFilter): Promise<Booking[]>;
+  abstract findByRoom(roomId: number, filter: BookingHistoryFilter): Promise<Booking[]>;
+  abstract findByTour(tourId: number, filter: BookingHistoryFilter): Promise<Booking[]>;
 
   /**
    * Conditional PENDING -> CONFIRMED. Returns null when the row was not PENDING.
    * That row count, not any preceding read, is the idempotency guard that makes
    * the confirmation emails fire exactly once under concurrent confirms.
    */
-  abstract markConfirmed(id: string, confirmedAt: Date): Promise<Booking | null>;
+  abstract markConfirmed(id: number, confirmedAt: Date): Promise<Booking | null>;
 
   /**
    * Conditional -> CANCELLED, releasing tour seats in the same transaction.
    * Returns null when the booking was already in a terminal state.
    */
   abstract markCancelled(
-    id: string,
+    id: number,
     cancelledAt: Date,
     reason: string | null,
   ): Promise<Booking | null>;

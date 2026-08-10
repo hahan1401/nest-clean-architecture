@@ -1,3 +1,3 @@
 export interface DeleteDocumentUseCase {
-  execute(id: string): Promise<{ documentId: string; deleted: true }>;
+  execute(id: number): Promise<{ documentId: number; deleted: true }>;
 }

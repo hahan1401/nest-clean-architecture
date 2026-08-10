@@ -280,7 +280,7 @@ export type DepartureStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
 export type PriceSource = 'BASE' | 'RULE' | 'DEPARTURE_OVERRIDE';
 
 export interface RoomResponse {
-  id: string;
+  id: number;
   code: string;
   name: string;
   description: string | null;
@@ -295,7 +295,7 @@ export interface PriceQuoteLineResponse {
   unitAmount: number;
   amount: number;
   source: PriceSource;
-  priceRuleId: string | null;
+  priceRuleId: number | null;
 }
 
 export interface PriceQuoteResponse {
@@ -311,7 +311,7 @@ export interface RoomAvailabilityResponse {
 }
 
 export interface TourResponse {
-  id: string;
+  id: number;
   slug: string;
   name: string;
   description: string | null;
@@ -321,8 +321,8 @@ export interface TourResponse {
 }
 
 export interface TourDepartureResponse {
-  id: string;
-  tourId: string;
+  id: number;
+  tourId: number;
   departureDate: string | null;
   capacity: number;
   bookedSeats: number;
@@ -337,10 +337,10 @@ export interface AvailableDepartureResponse extends TourDepartureResponse {
 }
 
 export interface PriceRuleResponse {
-  id: string;
+  id: number;
   name: string;
-  roomId: string | null;
-  tourId: string | null;
+  roomId: number | null;
+  tourId: number | null;
   startDate: string | null;
   endDate: string | null;
   daysOfWeek: number[];  // 0 = Sunday
@@ -358,16 +358,16 @@ export interface BookingLineResponse {
 }
 
 export interface BookingResponse {
-  id: string;
+  id: number;
   reference: string;              // human-quotable, e.g. on the phone
   type: BookableType;
   status: BookingStatus;
 
-  roomId: string | null;          // ROOM bookings
+  roomId: number | null;          // ROOM bookings
   checkIn: string | null;
   checkOut: string | null;
 
-  tourDepartureId: string | null; // TOUR bookings
+  tourDepartureId: number | null; // TOUR bookings
   seats: number | null;
 
   guests: number;
@@ -389,7 +389,7 @@ export interface BookingResponse {
 }
 
 export interface UserResponse {
-  id: string;
+  id: number;
   name: string;
   email: string;
   locationName: string | null;
@@ -433,7 +433,7 @@ export interface UserWithDistanceResponse extends UserResponse {
 with its `available` flag *and* a priced quote in one round trip.
 
 `/rooms/code/:code` resolves the unique, human-readable `Room.code` (`SUONG`, `THONG`, `SUOI`,
-`KHOI`, `QUY`, `DOI`), so a public route can be `/stays/SUONG` instead of a uuid. Unknown code →
+`KHOI`, `QUY`, `DOI`), so a public route can be `/stays/SUONG` instead of a numeric id. Unknown code →
 `404` `NOT_FOUND` with the standard error envelope. The lookup is exact and case-sensitive.
 
 ### Tours — `/tours`
@@ -457,11 +457,12 @@ with its `available` flag *and* a priced quote in one round trip.
 `priceOverride?` (integer ≥ 0).
 
 `/tours/slug/:slug` resolves the unique `Tour.slug` (`cau-dat-sunrise`, `pine-and-waterfall`,
-`coffee-hills`), so a public route can be `/journeys/cau-dat-sunrise` instead of a uuid. Unknown
+`coffee-hills`), so a public route can be `/journeys/cau-dat-sunrise` instead of a numeric id. Unknown
 slug → `404` `NOT_FOUND`.
 
 Route-order note: `/rooms/code/:code` and `/tours/slug/:slug` are declared **before** `/rooms/:id`
-and `/tours/:id`, so a code or slug can never be matched as an id.
+and `/tours/:id`, so a code or slug can never be matched as an id. Every `:id` segment also runs
+through `ParseIntPipe`, so a non-numeric id is a `400` rather than a lookup that cannot match.
 
 ### Price rules — `/price-rules`
 
@@ -499,12 +500,12 @@ later never rewrites an existing booking's price.
   type: 'ROOM' | 'TOUR',
 
   // ROOM
-  roomId?: string,
+  roomId?: number,
   checkIn?: string,          // "YYYY-MM-DD", not in the past
   checkOut?: string,         // must be after checkIn
 
   // TOUR
-  tourDepartureId?: string,
+  tourDepartureId?: number,
   seats?: number,            // ≥1, must equal `guests`
 
   guests: number,            // ≥1, ≤ room.maxGuests for ROOM
@@ -516,7 +517,8 @@ later never rewrites an existing booking's price.
 `QuotePriceDto` is the same minus `guests`, `customer` and `notes`.
 
 Route-order note: `/bookings/reference/:reference` and `/bookings/cancel/:token` are declared before
-`/bookings/:id`, so a booking can never be looked up under the literal id `"reference"`.
+`/bookings/:id`, so a booking can never be looked up under the literal id `"reference"`. `:id` is
+parsed as an integer, so a non-numeric value is a `400`; `reference` and `token` stay strings.
 
 ### Users — `/users`
 

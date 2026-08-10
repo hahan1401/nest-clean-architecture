@@ -8,7 +8,7 @@ import { GetUserByIdUseCase } from '../../domain/usecases/get-user-by-id.usecase
 export class GetUserByIdService implements GetUserByIdUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
-  async execute(id: string): Promise<User> {
+  async execute(id: number): Promise<User> {
     const user = await this.userRepository.findById(id);
     if (!user) {
       throw new NotFoundError(`User with id ${id} not found`);

@@ -10,15 +10,15 @@ interface CreateBookingCommon {
 }
 
 export type CreateBookingInput =
-  | (CreateBookingCommon & { type: 'ROOM'; roomId: string; range: DateRange })
-  | (CreateBookingCommon & { type: 'TOUR'; tourDepartureId: string; seats: number });
+  | (CreateBookingCommon & { type: 'ROOM'; roomId: number; range: DateRange })
+  | (CreateBookingCommon & { type: 'TOUR'; tourDepartureId: number; seats: number });
 
 export interface CreateBookingUseCase {
   execute(input: CreateBookingInput): Promise<Booking>;
 }
 
 export interface ConfirmBookingInput {
-  bookingId: string;
+  bookingId: number;
   requestId?: string;
 }
 
@@ -27,7 +27,7 @@ export interface ConfirmBookingUseCase {
 }
 
 export interface CancelBookingInput {
-  bookingId: string;
+  bookingId: number;
   reason?: string | null;
 }
 
@@ -36,7 +36,7 @@ export interface CancelBookingUseCase {
 }
 
 export interface GetBookingUseCase {
-  execute(id: string): Promise<Booking>;
+  execute(id: number): Promise<Booking>;
 }
 
 export interface GetBookingByReferenceUseCase {

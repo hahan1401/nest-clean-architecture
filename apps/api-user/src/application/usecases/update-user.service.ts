@@ -8,7 +8,7 @@ import { UpdateUserUseCase } from '../../domain/usecases/update-user.usecase';
 export class UpdateUserService implements UpdateUserUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
-  async execute(id: string, data: Partial<User>): Promise<User> {
+  async execute(id: number, data: Partial<User>): Promise<User> {
     const user = await this.userRepository.update(id, data);
     if (!user) {
       throw new NotFoundError(`User with id ${id} not found`);

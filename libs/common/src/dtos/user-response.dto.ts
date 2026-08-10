@@ -1,7 +1,7 @@
 import { User, UserWithDistance } from '@app/database';
 
 export class UserResponseDto {
-  id: string;
+  id: number;
   name: string;
   email: string;
   locationName: string | null;

@@ -18,11 +18,11 @@ export class PrismaPriceRuleRepository extends PriceRuleRepository {
     return new PriceRule(rule);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: number): Promise<void> {
     await this.prisma.priceRule.delete({ where: { id } });
   }
 
-  async findById(id: string): Promise<PriceRule | null> {
+  async findById(id: number): Promise<PriceRule | null> {
     const rule = await this.prisma.priceRule.findUnique({ where: { id } });
     return rule ? new PriceRule(rule) : null;
   }
@@ -41,7 +41,7 @@ export class PrismaPriceRuleRepository extends PriceRuleRepository {
    * The final precedence decision is the pure comparator in the domain layer -
    * this only narrows the set.
    */
-  async findForRoom(roomId: string, range: DateRange): Promise<PriceRule[]> {
+  async findForRoom(roomId: number, range: DateRange): Promise<PriceRule[]> {
     const lastNight = new Date(range.to.getTime() - 86_400_000);
 
     const rules = await this.prisma.priceRule.findMany({
@@ -57,7 +57,7 @@ export class PrismaPriceRuleRepository extends PriceRuleRepository {
     return rules.map((rule) => new PriceRule(rule));
   }
 
-  async findForTour(tourId: string, on: Date): Promise<PriceRule[]> {
+  async findForTour(tourId: number, on: Date): Promise<PriceRule[]> {
     const rules = await this.prisma.priceRule.findMany({
       where: {
         tourId,

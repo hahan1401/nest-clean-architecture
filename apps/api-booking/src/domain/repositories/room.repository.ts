@@ -17,7 +17,7 @@ export interface RoomListFilter extends ListRange {
 
 export abstract class RoomRepository {
   abstract create(data: CreateRoomData): Promise<Room>;
-  abstract findById(id: string): Promise<Room | null>;
+  abstract findById(id: number): Promise<Room | null>;
   abstract findByCode(code: string): Promise<Room | null>;
   abstract findMany(filter: RoomListFilter): Promise<Room[]>;
 
@@ -25,5 +25,5 @@ export abstract class RoomRepository {
   abstract findAvailable(range: DateRange, filter: RoomListFilter): Promise<Room[]>;
 
   /** True when no slot-holding booking overlaps `range` for this room. */
-  abstract isAvailable(roomId: string, range: DateRange): Promise<boolean>;
+  abstract isAvailable(roomId: number, range: DateRange): Promise<boolean>;
 }

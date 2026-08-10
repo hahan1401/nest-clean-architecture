@@ -5,7 +5,7 @@ import { GetRoomByCodeService } from './room.service';
 
 const room = (overrides: Partial<Room> = {}): Room =>
   new Room({
-    id: '11111111-1111-4111-8111-000000000001',
+    id: 1,
     code: 'SUONG',
     name: 'Sương',
     description: 'The smallest room, and the one the fog reaches first.',

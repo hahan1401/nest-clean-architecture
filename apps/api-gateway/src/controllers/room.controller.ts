@@ -18,6 +18,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   Req,
@@ -80,7 +81,7 @@ export class RoomController {
   }
 
   @Get(':id')
-  get(@Req() req: CorrelatedRequest, @Param('id') id: string) {
+  get(@Req() req: CorrelatedRequest, @Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(
       this.bookingClient.send<RoomResponseDto>(BOOKING_PATTERNS.GET_ROOM, {
         id,
@@ -92,7 +93,7 @@ export class RoomController {
   @Get(':id/availability')
   checkAvailability(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query() query: RoomAvailabilityQueryDto,
   ) {
     return lastValueFrom(
@@ -106,7 +107,7 @@ export class RoomController {
   @Get(':id/bookings')
   listBookings(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query() query: BookingHistoryQueryDto,
   ) {
     return lastValueFrom(

@@ -8,11 +8,15 @@ const prisma = new PrismaClient({ adapter });
 /**
  * Thong Dong Retreat - the real catalogue.
  *
- * Every id, code, slug, name, description and price below is copied verbatim
- * from the frontend fixture at `homestay-booking-fe/lib/content/retreat.ts`.
- * Reusing the fixture uuids means a component that was rendering the fixture
- * keeps rendering the same entity once it is pointed at the gateway - and it
- * makes every upsert below idempotent.
+ * Every code, slug, name, description and price below is copied verbatim from
+ * the frontend fixture at `homestay-booking-fe/lib/content/retreat.ts`, so a
+ * component that was rendering the fixture keeps rendering the same entity once
+ * it is pointed at the gateway.
+ *
+ * Ids are database-assigned integers and therefore deliberately absent here.
+ * Idempotency comes from the natural keys instead - `Room.code`, `Tour.slug`,
+ * and `(tourId, departureDate)` on a departure - which is also what the public
+ * lookup routes use.
  */
 
 /**
@@ -36,7 +40,6 @@ const dayFromToday = (offsetDays: number): Date => {
 // All prices are whole VND - no minor unit.
 const ROOMS = [
   {
-    id: '11111111-1111-4111-8111-000000000001',
     code: 'SUONG',
     name: 'Sương',
     description:
@@ -45,16 +48,13 @@ const ROOMS = [
     basePrice: 1_150_000,
   },
   {
-    id: '11111111-1111-4111-8111-000000000002',
     code: 'THONG',
     name: 'Thông',
-    description:
-      'Level with the pine canopy. You hear the trees before you hear anything else.',
+    description: 'Level with the pine canopy. You hear the trees before you hear anything else.',
     maxGuests: 2,
     basePrice: 1_350_000,
   },
   {
-    id: '11111111-1111-4111-8111-000000000003',
     code: 'SUOI',
     name: 'Suối',
     description:
@@ -63,7 +63,6 @@ const ROOMS = [
     basePrice: 1_450_000,
   },
   {
-    id: '11111111-1111-4111-8111-000000000004',
     code: 'KHOI',
     name: 'Khói',
     description: 'Built around the wood stove. Three can sleep here; two will want to.',
@@ -71,16 +70,13 @@ const ROOMS = [
     basePrice: 1_650_000,
   },
   {
-    id: '11111111-1111-4111-8111-000000000005',
     code: 'QUY',
     name: 'Dã Quỳ',
-    description:
-      'Corner room over the field that turns yellow in November. Two beds, a long desk.',
+    description: 'Corner room over the field that turns yellow in November. Two beds, a long desk.',
     maxGuests: 4,
     basePrice: 2_100_000,
   },
   {
-    id: '11111111-1111-4111-8111-000000000006',
     code: 'DOI',
     name: 'Đồi',
     description:
@@ -94,7 +90,6 @@ const ROOMS = [
 
 const TOURS = [
   {
-    id: '33333333-3333-4333-8333-000000000001',
     slug: 'cau-dat-sunrise',
     name: 'Sunrise over the Cầu Đất tea terraces',
     description:
@@ -103,7 +98,6 @@ const TOURS = [
     basePricePerPerson: 690_000,
   },
   {
-    id: '33333333-3333-4333-8333-000000000002',
     slug: 'pine-and-waterfall',
     name: 'Pine forest and the lower waterfall',
     description:
@@ -112,7 +106,6 @@ const TOURS = [
     basePricePerPerson: 850_000,
   },
   {
-    id: '33333333-3333-4333-8333-000000000003',
     slug: 'coffee-hills',
     name: 'Three days in the coffee hills',
     description:
@@ -123,19 +116,20 @@ const TOURS = [
 ];
 
 /**
- * Mirrors DEPARTURE_FIXTURES. `id` is fixed and `departureDate` is derived, so
- * re-seeding on a later day rolls the same seven departures forward instead of
- * accumulating a new set - which is what keeps this idempotent while the dates
- * stay relative to today.
+ * Mirrors DEPARTURE_FIXTURES. `departureDate` is derived from seed time, so
+ * `dropRolledDepartures` below clears yesterday's unbooked set first: that rolls
+ * the same seven departures forward on a later day instead of accumulating a new
+ * set, and re-seeding twice in one day is a no-op because (tourId,
+ * departureDate) is unique.
  */
 const DEPARTURES = [
-  { id: '44444444-4444-4444-8444-000000000001', slug: 'cau-dat-sunrise', inDays: 3, capacity: 8, bookedSeats: 6 },
-  { id: '44444444-4444-4444-8444-000000000002', slug: 'pine-and-waterfall', inDays: 5, capacity: 10, bookedSeats: 2 },
-  { id: '44444444-4444-4444-8444-000000000003', slug: 'cau-dat-sunrise', inDays: 10, capacity: 8, bookedSeats: 1 },
-  { id: '44444444-4444-4444-8444-000000000004', slug: 'coffee-hills', inDays: 12, capacity: 6, bookedSeats: 5, priceOverride: 3_900_000 },
-  { id: '44444444-4444-4444-8444-000000000005', slug: 'pine-and-waterfall', inDays: 17, capacity: 10, bookedSeats: 0 },
-  { id: '44444444-4444-4444-8444-000000000006', slug: 'cau-dat-sunrise', inDays: 24, capacity: 8, bookedSeats: 0 },
-  { id: '44444444-4444-4444-8444-000000000007', slug: 'coffee-hills', inDays: 31, capacity: 6, bookedSeats: 2 },
+  { slug: 'cau-dat-sunrise', inDays: 3, capacity: 8, bookedSeats: 6 },
+  { slug: 'pine-and-waterfall', inDays: 5, capacity: 10, bookedSeats: 2 },
+  { slug: 'cau-dat-sunrise', inDays: 10, capacity: 8, bookedSeats: 1 },
+  { slug: 'coffee-hills', inDays: 12, capacity: 6, bookedSeats: 5, priceOverride: 3_900_000 },
+  { slug: 'pine-and-waterfall', inDays: 17, capacity: 10, bookedSeats: 0 },
+  { slug: 'cau-dat-sunrise', inDays: 24, capacity: 8, bookedSeats: 0 },
+  { slug: 'coffee-hills', inDays: 31, capacity: 6, bookedSeats: 2 },
 ];
 
 // --- Weekend pricing --------------------------------------------------------
@@ -178,44 +172,88 @@ async function removeLegacySampleData() {
   }
 }
 
+/**
+ * Departures the previous seed run created and nobody has booked. Dropping them
+ * is what stops a run on a later day from leaving the old dates behind next to
+ * the freshly rolled ones. `onDelete: Restrict` means a departure a booking
+ * points at must survive, so the `bookings: { none: {} }` filter is not an
+ * optimisation - without it the delete would throw.
+ */
+async function dropRolledDepartures(keepDates: Date[]) {
+  await prisma.tourDeparture.deleteMany({
+    where: {
+      tour: { slug: { in: TOURS.map((tour) => tour.slug) } },
+      departureDate: { notIn: keepDates },
+      bookings: { none: {} },
+    },
+  });
+}
+
 async function seedBookingDomain() {
   await removeLegacySampleData();
 
   for (const room of ROOMS) {
-    await prisma.room.upsert({ where: { id: room.id }, update: room, create: room });
+    await prisma.room.upsert({ where: { code: room.code }, update: room, create: room });
   }
 
   for (const tour of TOURS) {
-    await prisma.tour.upsert({ where: { id: tour.id }, update: tour, create: tour });
+    await prisma.tour.upsert({ where: { slug: tour.slug }, update: tour, create: tour });
   }
 
-  const tourIdBySlug = new Map(TOURS.map((tour) => [tour.slug, tour.id]));
+  const tours = await prisma.tour.findMany({
+    where: { slug: { in: TOURS.map((tour) => tour.slug) } },
+    select: { id: true, slug: true },
+  });
+  const tourIdBySlug = new Map(tours.map((tour) => [tour.slug, tour.id]));
+
+  await dropRolledDepartures(DEPARTURES.map((departure) => dayFromToday(departure.inDays)));
 
   for (const departure of DEPARTURES) {
+    const tourId = tourIdBySlug.get(departure.slug)!;
+    const departureDate = dayFromToday(departure.inDays);
     const data = {
-      tourId: tourIdBySlug.get(departure.slug)!,
-      departureDate: dayFromToday(departure.inDays),
+      tourId,
+      departureDate,
       capacity: departure.capacity,
       bookedSeats: departure.bookedSeats,
       priceOverride: departure.priceOverride ?? null,
     };
     await prisma.tourDeparture.upsert({
-      where: { id: departure.id },
+      where: { tourId_departureDate: { tourId, departureDate } },
       update: data,
-      create: { id: departure.id, ...data },
+      create: data,
     });
   }
 
-  for (const [index, room] of ROOMS.entries()) {
+  const roomIdByCode = new Map(
+    (
+      await prisma.room.findMany({
+        where: { code: { in: ROOMS.map((room) => room.code) } },
+        select: { id: true, code: true },
+      })
+    ).map((room) => [room.code, room.id]),
+  );
+
+  for (const room of ROOMS) {
     const rule = {
-      id: `22222222-2222-4222-8222-${String(index + 1).padStart(12, '0')}`,
       name: `Friday and Saturday nights - ${room.name}`,
-      roomId: room.id,
+      roomId: roomIdByCode.get(room.code)!,
       daysOfWeek: WEEKEND_DAYS_OF_WEEK,
       amount: weekendAmount(room.basePrice),
       priority: 10,
     };
-    await prisma.priceRule.upsert({ where: { id: rule.id }, update: rule, create: rule });
+    // (roomId, name) is not a database key, so this is a find-then-write rather
+    // than an upsert. Deleting and recreating instead would SetNull the
+    // price_rule_id on every booking line that quoted the old rule.
+    const existing = await prisma.priceRule.findFirst({
+      where: { roomId: rule.roomId, name: rule.name },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.priceRule.update({ where: { id: existing.id }, data: rule });
+    } else {
+      await prisma.priceRule.create({ data: rule });
+    }
   }
 
   const firstDeparture = dayFromToday(DEPARTURES[0].inDays).toISOString().slice(0, 10);

@@ -12,7 +12,7 @@ export class UpdateLocationService implements UpdateLocationUseCase {
     private readonly geocodingClient: GeocodingClientPort,
   ) {}
 
-  async execute(userId: string, latitude: number, longitude: number): Promise<User> {
+  async execute(userId: number, latitude: number, longitude: number): Promise<User> {
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new NotFoundError(`User with id ${userId} not found`);

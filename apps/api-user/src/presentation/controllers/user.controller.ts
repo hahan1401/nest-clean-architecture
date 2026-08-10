@@ -40,7 +40,7 @@ export class UserController {
   }
 
   @MessagePattern(USER_PATTERNS.GET_USER_BY_ID)
-  async findOne(@Payload() id: string) {
+  async findOne(@Payload() id: number) {
     const user = await this.getUserByIdService.execute(id);
     return new UserResponseDto(user);
   }
@@ -49,7 +49,7 @@ export class UserController {
   async update(
     @Payload()
     data: {
-      id: string;
+      id: number;
       updateData: UpdateUserDto;
       requestId?: string;
     },
@@ -59,19 +59,19 @@ export class UserController {
   }
 
   @MessagePattern(USER_PATTERNS.DELETE_USER)
-  async remove(@Payload() id: string) {
+  async remove(@Payload() id: number) {
     await this.deleteUserService.execute(id);
     return { success: true };
   }
 
   @MessagePattern(USER_PATTERNS.UPDATE_LOCATION)
-  async updateLocation(@Payload() data: { id: string; latitude: number; longitude: number }) {
+  async updateLocation(@Payload() data: { id: number; latitude: number; longitude: number }) {
     const user = await this.updateLocationService.execute(data.id, data.latitude, data.longitude);
     return new UserResponseDto(user);
   }
 
   @MessagePattern(USER_PATTERNS.FIND_NEARBY_USERS)
-  async findNearby(@Payload() data: { id: string; radius: number }) {
+  async findNearby(@Payload() data: { id: number; radius: number }) {
     const users = await this.findNearbyUsersService.execute(data.id, data.radius);
     return users.map((u) => new UserWithDistanceResponseDto(u));
   }

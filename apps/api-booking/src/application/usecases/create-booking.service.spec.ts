@@ -40,7 +40,7 @@ const quote = (total: number): PriceQuote =>
 
 const room = (overrides: Partial<Room> = {}): Room =>
   new Room({
-    id: 'room-1',
+    id: 1,
     code: 'GARDEN',
     name: 'Garden Room',
     maxGuests: 2,
@@ -53,7 +53,7 @@ const room = (overrides: Partial<Room> = {}): Room =>
 
 const tour = (): Tour =>
   new Tour({
-    id: 'tour-1',
+    id: 1,
     slug: 'trek',
     name: 'Trek',
     durationDays: 1,
@@ -65,8 +65,8 @@ const tour = (): Tour =>
 
 const departure = (overrides: Partial<TourDeparture> = {}): TourDeparture =>
   new TourDeparture({
-    id: 'dep-1',
-    tourId: 'tour-1',
+    id: 1,
+    tourId: 1,
     departureDate: new Date('2099-03-06'),
     capacity: 12,
     bookedSeats: 0,
@@ -79,7 +79,7 @@ const departure = (overrides: Partial<TourDeparture> = {}): TourDeparture =>
 
 const roomInput = (overrides: Partial<Record<string, unknown>> = {}): CreateBookingInput => ({
   type: 'ROOM',
-  roomId: 'room-1',
+  roomId: 1,
   range: FAR_FUTURE,
   guests: 2,
   customer,
@@ -88,7 +88,7 @@ const roomInput = (overrides: Partial<Record<string, unknown>> = {}): CreateBook
 
 const tourInput = (overrides: Partial<Record<string, unknown>> = {}): CreateBookingInput => ({
   type: 'TOUR',
-  tourDepartureId: 'dep-1',
+  tourDepartureId: 1,
   seats: 2,
   guests: 2,
   customer,
@@ -178,12 +178,12 @@ describe('CreateBookingService', () => {
     it('freezes the quoted total onto the booking', async () => {
       roomRepository.findById.mockResolvedValue(room());
       pricing.quoteRoomStay.mockResolvedValue(quote(1_950_000));
-      bookingRepository.createRoomBooking.mockResolvedValue(new Booking({ id: 'b1' }));
+      bookingRepository.createRoomBooking.mockResolvedValue(new Booking({ id: 1 }));
 
       await service.execute(roomInput());
 
       const [data] = bookingRepository.createRoomBooking.mock.calls[0];
-      expect(data.roomId).toBe('room-1');
+      expect(data.roomId).toBe(1);
       // Frozen, not recomputed: the persisted total is the quoted one.
       expect(data.quote.total).toBe(1_950_000);
       expect(data.reference).toMatch(/^BK-[2-9A-HJ-NP-Z]{8}$/);
@@ -233,12 +233,12 @@ describe('CreateBookingService', () => {
       departureRepository.findById.mockResolvedValue(departure());
       tourRepository.findById.mockResolvedValue(tour());
       pricing.quoteTourSeats.mockResolvedValue(quote(900_000));
-      bookingRepository.createTourBooking.mockResolvedValue(new Booking({ id: 'b2' }));
+      bookingRepository.createTourBooking.mockResolvedValue(new Booking({ id: 2 }));
 
       await service.execute(tourInput());
 
       const [data] = bookingRepository.createTourBooking.mock.calls[0];
-      expect(data.tourDepartureId).toBe('dep-1');
+      expect(data.tourDepartureId).toBe(1);
       expect(data.seats).toBe(2);
       expect(data.quote.total).toBe(900_000);
     });

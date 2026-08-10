@@ -7,7 +7,7 @@ const roomNotification = (
   overrides: Partial<BookingConfirmedNotification> = {},
 ): BookingConfirmedNotification =>
   ({
-    bookingId: 'b1',
+    bookingId: 1,
     reference: 'BK-7F3K9Q2A',
     customerName: 'Tran Thi B',
     customerEmail: 'guest@example.com',
@@ -26,7 +26,7 @@ const roomNotification = (
   }) as BookingConfirmedNotification;
 
 const tourNotification = (): BookingConfirmedNotification => ({
-  bookingId: 'b2',
+  bookingId: 2,
   reference: 'BK-TOUR1234',
   customerName: 'Le Van C',
   customerEmail: 'guest2@example.com',

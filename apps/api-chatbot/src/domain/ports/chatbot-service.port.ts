@@ -8,7 +8,7 @@ export interface UpsertDocumentInput {
 }
 
 export interface UpdateDocumentInput {
-  id: string;
+  id: number;
   fileName?: string;
   content?: string;
   chunkSize?: number;
@@ -16,7 +16,7 @@ export interface UpdateDocumentInput {
 }
 
 export interface DocumentMutationResult {
-  documentId: string;
+  documentId: number;
   fileName: string;
   chunkCount: number;
 }
@@ -26,5 +26,5 @@ export abstract class ChatBotServicePort {
   abstract apiStrictlyGenerateSSe(prompt: string): Observable<{ data: string }>;
   abstract upsertDocument(input: UpsertDocumentInput): Promise<DocumentMutationResult>;
   abstract updateDocument(input: UpdateDocumentInput): Promise<DocumentMutationResult>;
-  abstract deleteDocument(id: string): Promise<{ documentId: string; deleted: true }>;
+  abstract deleteDocument(id: number): Promise<{ documentId: number; deleted: true }>;
 }

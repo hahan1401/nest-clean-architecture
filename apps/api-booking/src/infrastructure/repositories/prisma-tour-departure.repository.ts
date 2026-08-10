@@ -15,8 +15,8 @@ import {
 
 /** Shape of the raw availability projection; typed so the rows are not `any`. */
 interface AvailableDepartureRow {
-  id: string;
-  tour_id: string;
+  id: number;
+  tour_id: number;
   tour_name: string;
   departure_date: Date;
   capacity: number;
@@ -40,19 +40,19 @@ export class PrismaTourDepartureRepository extends TourDepartureRepository {
     return new TourDeparture(departure);
   }
 
-  async findById(id: string): Promise<TourDeparture | null> {
+  async findById(id: number): Promise<TourDeparture | null> {
     const departure = await this.prisma.tourDeparture.findUnique({ where: { id } });
     return departure ? new TourDeparture(departure) : null;
   }
 
-  async findByTourAndDate(tourId: string, departureDate: Date): Promise<TourDeparture | null> {
+  async findByTourAndDate(tourId: number, departureDate: Date): Promise<TourDeparture | null> {
     const departure = await this.prisma.tourDeparture.findUnique({
       where: { tourId_departureDate: { tourId, departureDate } },
     });
     return departure ? new TourDeparture(departure) : null;
   }
 
-  async findByTour(tourId: string, range?: DateRange): Promise<TourDeparture[]> {
+  async findByTour(tourId: number, range?: DateRange): Promise<TourDeparture[]> {
     const departures = await this.prisma.tourDeparture.findMany({
       where: {
         tourId,
@@ -74,7 +74,7 @@ export class PrismaTourDepartureRepository extends TourDepartureRepository {
   async findAvailable(
     range: DateRange,
     seats: number,
-    tourId?: string,
+    tourId?: number,
   ): Promise<AvailableDeparture[]> {
     const tourFilter = tourId ? Prisma.sql`AND d."tour_id" = ${tourId}` : Prisma.empty;
 

@@ -7,7 +7,7 @@ import { FindNearbyUsersUseCase } from '../../domain/usecases/find-nearby-users.
 export class FindNearbyUsersService implements FindNearbyUsersUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
-  async execute(userId: string, radiusKm?: number): Promise<UserWithDistance[]> {
+  async execute(userId: number, radiusKm?: number): Promise<UserWithDistance[]> {
     return this.userRepository.findNearby(userId, radiusKm);
   }
 }

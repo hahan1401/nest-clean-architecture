@@ -19,7 +19,7 @@ const toDateOnly = (value: Date | null | undefined): string | null =>
   value ? value.toISOString().slice(0, 10) : null;
 
 export class RoomResponseDto {
-  id: string;
+  id: number;
   code: string;
   name: string;
   description: string | null;
@@ -44,7 +44,7 @@ export class PriceQuoteLineResponseDto {
   unitAmount: number;
   amount: number;
   source: PriceSource;
-  priceRuleId: string | null;
+  priceRuleId: number | null;
 
   constructor(line: PriceQuoteLine) {
     this.date = toDateOnly(line.date);
@@ -82,7 +82,7 @@ export class RoomAvailabilityResponseDto {
 }
 
 export class TourResponseDto {
-  id: string;
+  id: number;
   slug: string;
   name: string;
   description: string | null;
@@ -102,8 +102,8 @@ export class TourResponseDto {
 }
 
 export class TourDepartureResponseDto {
-  id: string;
-  tourId: string;
+  id: number;
+  tourId: number;
   departureDate: string | null;
   capacity: number;
   bookedSeats: number;
@@ -136,10 +136,10 @@ export class AvailableDepartureResponseDto extends TourDepartureResponseDto {
 }
 
 export class PriceRuleResponseDto {
-  id: string;
+  id: number;
   name: string;
-  roomId: string | null;
-  tourId: string | null;
+  roomId: number | null;
+  tourId: number | null;
   startDate: string | null;
   endDate: string | null;
   daysOfWeek: number[];
@@ -183,16 +183,16 @@ export class BookingLineResponseDto {
  * response - anyone who can read a booking could otherwise cancel it.
  */
 export class BookingResponseDto {
-  id: string;
+  id: number;
   reference: string;
   type: BookableType;
   status: BookingStatus;
 
-  roomId: string | null;
+  roomId: number | null;
   checkIn: string | null;
   checkOut: string | null;
 
-  tourDepartureId: string | null;
+  tourDepartureId: number | null;
   seats: number | null;
 
   guests: number;

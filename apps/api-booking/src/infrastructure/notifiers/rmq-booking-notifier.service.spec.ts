@@ -9,7 +9,7 @@ import { RmqBookingNotifierService } from './rmq-booking-notifier.service';
 const OWNER_EMAIL = 'owner@example.com';
 
 const notification: BookingConfirmedNotification = {
-  bookingId: 'b1',
+  bookingId: 1,
   reference: 'BK-7F3K9Q2A',
   customerName: 'Tran Thi B',
   customerEmail: 'guest@example.com',

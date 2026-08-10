@@ -13,12 +13,12 @@ describe('DeleteDocumentService', () => {
   });
 
   it('delegates deletion to the port', async () => {
-    chatBotService.deleteDocument.mockResolvedValue({ documentId: 'd1', deleted: true });
+    chatBotService.deleteDocument.mockResolvedValue({ documentId: 1, deleted: true });
 
-    await expect(service.execute('d1')).resolves.toEqual({
-      documentId: 'd1',
+    await expect(service.execute(1)).resolves.toEqual({
+      documentId: 1,
       deleted: true,
     });
-    expect(chatBotService.deleteDocument).toHaveBeenCalledWith('d1');
+    expect(chatBotService.deleteDocument).toHaveBeenCalledWith(1);
   });
 });

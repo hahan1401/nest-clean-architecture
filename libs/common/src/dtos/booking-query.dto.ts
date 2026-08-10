@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
 const DATE_ONLY = { strict: true } as const;
 
@@ -83,10 +83,14 @@ export class BookingHistoryQueryDto extends ListRangeQueryDto {
 
 export class PriceRuleListQueryDto {
   @IsOptional()
-  @IsString()
-  roomId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  roomId?: number;
 
   @IsOptional()
-  @IsString()
-  tourId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tourId?: number;
 }

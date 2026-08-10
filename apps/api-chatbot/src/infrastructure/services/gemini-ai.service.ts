@@ -17,7 +17,7 @@ import {
 import { DependencyError, NotFoundError, ValidationError } from '@app/common';
 
 type DocumentRow = {
-  id: string;
+  id: number;
   file_name: string;
 };
 
@@ -25,7 +25,7 @@ type RetrievedChunkRow = {
   chunk_content: string;
   file_name: string;
   similarity: number;
-  chunk_id?: string;
+  chunk_id?: number;
   chunk_index?: number;
 };
 
@@ -160,7 +160,7 @@ export class GeminiAIService extends ChatBotServicePort {
 
   private async insertChunks(
     tx: ExtendedTransactionClient,
-    documentId: string,
+    documentId: number,
     chunks: string[],
     embeddings: number[][],
   ) {
@@ -364,8 +364,8 @@ export class GeminiAIService extends ChatBotServicePort {
       };
     });
   }
-  async deleteDocument(id: string): Promise<{ documentId: string; deleted: true }> {
-    if (!id?.trim()) {
+  async deleteDocument(id: number): Promise<{ documentId: number; deleted: true }> {
+    if (!Number.isInteger(id) || id < 1) {
       throw new ValidationError('Document id is required');
     }
 
@@ -373,7 +373,7 @@ export class GeminiAIService extends ChatBotServicePort {
     // onto a replica if the extension's routing rules ever change.
     const deleted = await this.prismaService
       .$primary()
-      .$queryRawUnsafe<Array<{ id: string }>>(
+      .$queryRawUnsafe<Array<{ id: number }>>(
         'DELETE FROM "documents" WHERE "id" = $1 RETURNING "id"',
         id,
       );
@@ -389,7 +389,7 @@ export class GeminiAIService extends ChatBotServicePort {
   }
 
   async updateDocument(input: UpdateDocumentInput): Promise<DocumentMutationResult> {
-    if (!input.id?.trim()) {
+    if (!Number.isInteger(input.id) || input.id < 1) {
       throw new ValidationError('Document id is required');
     }
 

@@ -15,7 +15,7 @@ export class PrismaUserRepository extends UserRepository {
     return users.map((user) => new User(user));
   }
 
-  async findById(id: string): Promise<User | null> {
+  async findById(id: number): Promise<User | null> {
     const user = await this.prisma.user.findUnique({ where: { id } });
     return user ? new User(user) : null;
   }
@@ -30,17 +30,17 @@ export class PrismaUserRepository extends UserRepository {
     return new User(user);
   }
 
-  async update(id: string, data: Partial<User>): Promise<User> {
+  async update(id: number, data: Partial<User>): Promise<User> {
     const user = await this.prisma.user.update({ where: { id }, data });
     return new User(user);
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: number): Promise<void> {
     await this.prisma.user.delete({ where: { id } });
   }
 
   async updateLocation(
-    id: string,
+    id: number,
     latitude: number,
     longitude: number,
     locationName: string | null,
@@ -52,7 +52,7 @@ export class PrismaUserRepository extends UserRepository {
     return new User(user);
   }
 
-  async findNearby(userId: string, radiusKm: number): Promise<UserWithDistance[]> {
+  async findNearby(userId: number, radiusKm: number): Promise<UserWithDistance[]> {
     // Read the caller's own coordinates from the primary: this frequently runs right
     // after updateLocation, and replication lag would search from a stale origin.
     const row = await this.prisma.$primary().user.findUnique({ where: { id: userId } });

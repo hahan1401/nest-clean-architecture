@@ -640,8 +640,20 @@ cancellation credential. The token never appears in an API response.
 
 `bookings_room_no_overlap` creates a GiST index that appears in `pg_index` but not in the
 Prisma schema, so **every** later `prisma migrate dev` emits a `DROP` for it. Delete that
-line by hand, exactly as with the pre-existing `ivfflat` index and `gen_random_uuid()`
-defaults. This is documented in the `20260808150946_add_booking_domain` migration header.
+line by hand, exactly as with the pre-existing `ivfflat` index. This is documented in the
+`20260808150946_add_booking_domain` migration header.
+
+The sharper edge is that Prisma models neither `CHECK` nor `EXCLUDE`, and Postgres silently
+drops any constraint mentioning a column that gets dropped — which is what a column *retype*
+is under the hood. `20260810082416_use_int_autoincrement_ids` retyped `room_id`, `tour_id` and
+`tour_departure_id`, and would have taken `bookings_shape_check`, `bookings_room_no_overlap`
+and `price_rules_target_check` with them; that migration drops and recreates all three by
+hand. After any migration that touches those columns, check the constraints are still there:
+
+```sql
+SELECT conrelid::regclass, conname FROM pg_constraint
+WHERE connamespace = 'public'::regnamespace AND contype IN ('c', 'x') ORDER BY 1, 2;
+```
 
 ---
 

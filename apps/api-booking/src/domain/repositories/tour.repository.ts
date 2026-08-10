@@ -15,7 +15,7 @@ export interface TourListFilter extends ListRange {
 
 export abstract class TourRepository {
   abstract create(data: CreateTourData): Promise<Tour>;
-  abstract findById(id: string): Promise<Tour | null>;
+  abstract findById(id: number): Promise<Tour | null>;
   abstract findBySlug(slug: string): Promise<Tour | null>;
   abstract findMany(filter: TourListFilter): Promise<Tour[]>;
 }

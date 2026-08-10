@@ -84,7 +84,7 @@ export class ChatbotController {
       ...(chunkOverlap !== undefined ? { chunkOverlap } : {}),
     };
     return firstValueFrom(
-      this.chatbotService.send<{ documentId: string; fileName: string; chunkCount: number }>(
+      this.chatbotService.send<{ documentId: number; fileName: string; chunkCount: number }>(
         CHATBOT_PATTERNS.UPSERT_DOCUMENT,
         payload,
       ),

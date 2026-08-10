@@ -56,7 +56,7 @@ export class TourController {
   }
 
   @MessagePattern(BOOKING_PATTERNS.GET_TOUR)
-  async get(@Payload() data: { id: string }): Promise<TourResponseDto> {
+  async get(@Payload() data: { id: number }): Promise<TourResponseDto> {
     const tour = await this.getTourService.execute(data.id);
     return new TourResponseDto(tour);
   }
@@ -69,7 +69,7 @@ export class TourController {
 
   @MessagePattern(BOOKING_PATTERNS.CREATE_TOUR_DEPARTURE)
   async createDeparture(
-    @Payload() data: CreateTourDepartureDto & { tourId: string },
+    @Payload() data: CreateTourDepartureDto & { tourId: number },
   ): Promise<TourDepartureResponseDto> {
     const departure = await this.createTourDepartureService.execute({
       tourId: data.tourId,
@@ -82,7 +82,7 @@ export class TourController {
 
   @MessagePattern(BOOKING_PATTERNS.LIST_TOUR_DEPARTURES)
   async listDepartures(
-    @Payload() data: { tourId: string; from?: string; to?: string },
+    @Payload() data: { tourId: number; from?: string; to?: string },
   ): Promise<TourDepartureResponseDto[]> {
     const departures = await this.listTourDeparturesService.execute({
       tourId: data.tourId,
@@ -93,7 +93,7 @@ export class TourController {
 
   @MessagePattern(BOOKING_PATTERNS.SEARCH_AVAILABLE_DEPARTURES)
   async searchAvailable(
-    @Payload() data: { from: string; to: string; seats?: number; tourId?: string },
+    @Payload() data: { from: string; to: string; seats?: number; tourId?: number },
   ): Promise<AvailableDepartureResponseDto[]> {
     const departures = await this.searchAvailableDeparturesService.execute({
       range: toDateRange(data.from, data.to),
@@ -105,7 +105,7 @@ export class TourController {
 
   @MessagePattern(BOOKING_PATTERNS.CHECK_TOUR_AVAILABILITY)
   async checkAvailability(
-    @Payload() data: { tourId: string; from: string; to: string; seats?: number },
+    @Payload() data: { tourId: number; from: string; to: string; seats?: number },
   ): Promise<AvailableDepartureResponseDto[]> {
     const departures = await this.checkTourAvailabilityService.execute({
       tourId: data.tourId,
@@ -119,7 +119,7 @@ export class TourController {
   async listBookings(
     @Payload()
     data: {
-      tourId: string;
+      tourId: number;
       status?: BookingStatus;
       from?: string;
       to?: string;

@@ -1,5 +1,5 @@
 import { User } from '@app/database';
 
 export interface UpdateLocationUseCase {
-  execute(userId: string, latitude: number, longitude: number): Promise<User>;
+  execute(userId: number, latitude: number, longitude: number): Promise<User>;
 }

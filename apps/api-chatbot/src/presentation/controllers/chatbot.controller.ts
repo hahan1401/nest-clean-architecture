@@ -41,7 +41,7 @@ export class ChatbotController {
   }
 
   @MessagePattern(CHATBOT_PATTERNS.DELETE_DOCUMENT)
-  async deleteDocument(@Payload() data: { id: string }) {
+  async deleteDocument(@Payload() data: { id: number }) {
     return this.deleteDocumentService.execute(data.id);
   }
 }

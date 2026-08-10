@@ -50,7 +50,7 @@ export class PrismaBookingRepository extends BookingRepository {
   }
 
   /** Frozen price lines, derived from the same quote object as totalAmount. */
-  private lineData(bookingId: string, quote: PriceQuote) {
+  private lineData(bookingId: number, quote: PriceQuote) {
     return quote.lines.map((line) => ({
       bookingId,
       lineDate: line.date,
@@ -64,7 +64,7 @@ export class PrismaBookingRepository extends BookingRepository {
 
   private async writeLines(
     tx: ExtendedTransactionClient,
-    bookingId: string,
+    bookingId: number,
     quote: PriceQuote,
   ): Promise<void> {
     await tx.bookingLine.createMany({ data: this.lineData(bookingId, quote) });
@@ -151,7 +151,7 @@ export class PrismaBookingRepository extends BookingRepository {
     });
   }
 
-  async findById(id: string): Promise<Booking | null> {
+  async findById(id: number): Promise<Booking | null> {
     const booking = await this.prisma.booking.findUnique({
       where: { id },
       include: { lines: { orderBy: { lineDate: 'asc' } } },
@@ -180,7 +180,7 @@ export class PrismaBookingRepository extends BookingRepository {
     return booking ? toBooking(booking) : null;
   }
 
-  async findDetailedById(id: string): Promise<BookingDetail | null> {
+  async findDetailedById(id: number): Promise<BookingDetail | null> {
     const booking = await this.prisma.$primary().booking.findUnique({
       where: { id },
       include: {
@@ -203,7 +203,7 @@ export class PrismaBookingRepository extends BookingRepository {
     };
   }
 
-  async findByRoom(roomId: string, filter: BookingHistoryFilter): Promise<Booking[]> {
+  async findByRoom(roomId: number, filter: BookingHistoryFilter): Promise<Booking[]> {
     const bookings = await this.prisma.$replica().booking.findMany({
       where: {
         roomId,
@@ -220,7 +220,7 @@ export class PrismaBookingRepository extends BookingRepository {
     return bookings.map(toBooking);
   }
 
-  async findByTour(tourId: string, filter: BookingHistoryFilter): Promise<Booking[]> {
+  async findByTour(tourId: number, filter: BookingHistoryFilter): Promise<Booking[]> {
     const bookings = await this.prisma.$replica().booking.findMany({
       where: {
         tourDeparture: {
@@ -239,7 +239,7 @@ export class PrismaBookingRepository extends BookingRepository {
     return bookings.map(toBooking);
   }
 
-  async markConfirmed(id: string, confirmedAt: Date): Promise<Booking | null> {
+  async markConfirmed(id: number, confirmedAt: Date): Promise<Booking | null> {
     // Conditional on PENDING: the row count is the idempotency guard, so two
     // concurrent confirms produce exactly one winner and one set of emails.
     const result = await this.prisma.booking.updateMany({
@@ -250,7 +250,7 @@ export class PrismaBookingRepository extends BookingRepository {
   }
 
   async markCancelled(
-    id: string,
+    id: number,
     cancelledAt: Date,
     reason: string | null,
   ): Promise<Booking | null> {

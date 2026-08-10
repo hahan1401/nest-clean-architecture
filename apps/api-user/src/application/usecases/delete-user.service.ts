@@ -7,7 +7,7 @@ import { DeleteUserUseCase } from '../../domain/usecases/delete-user.usecase';
 export class DeleteUserService implements DeleteUserUseCase {
   constructor(private readonly userRepository: UserRepository) {}
 
-  async execute(id: string): Promise<void> {
+  async execute(id: number): Promise<void> {
     const user = await this.userRepository.findById(id);
     if (!user) {
       throw new NotFoundError(`User with id ${id} not found`);

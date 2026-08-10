@@ -13,10 +13,10 @@ export interface ListRoomsUseCase {
 }
 
 export interface GetRoomUseCase {
-  execute(id: string): Promise<Room>;
+  execute(id: number): Promise<Room>;
 }
 
-/** Lookup by the human-readable `Room.code`, so public URLs need no uuid. */
+/** Lookup by the human-readable `Room.code`, so public URLs need no numeric id. */
 export interface GetRoomByCodeUseCase {
   execute(code: string): Promise<Room>;
 }
@@ -33,7 +33,7 @@ export interface SearchAvailableRoomsUseCase {
 }
 
 export interface CheckRoomAvailabilityInput {
-  roomId: string;
+  roomId: number;
   range: DateRange;
 }
 
@@ -42,7 +42,7 @@ export interface CheckRoomAvailabilityUseCase {
 }
 
 export interface ListRoomBookingsInput {
-  roomId: string;
+  roomId: number;
   filter: BookingHistoryFilter;
 }
 

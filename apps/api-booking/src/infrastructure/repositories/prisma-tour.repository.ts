@@ -17,7 +17,7 @@ export class PrismaTourRepository extends TourRepository {
     return new Tour(tour);
   }
 
-  async findById(id: string): Promise<Tour | null> {
+  async findById(id: number): Promise<Tour | null> {
     const tour = await this.prisma.tour.findUnique({ where: { id } });
     return tour ? new Tour(tour) : null;
   }

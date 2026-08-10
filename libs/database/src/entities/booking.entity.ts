@@ -4,7 +4,7 @@ import { BookableType, BookingStatus, DepartureStatus, PriceSource } from '@pris
 export { BookableType, BookingStatus, DepartureStatus, PriceSource };
 
 export class Room {
-  id: string;
+  id: number;
   code: string;
   name: string;
   description?: string | null;
@@ -21,7 +21,7 @@ export class Room {
 }
 
 export class Tour {
-  id: string;
+  id: number;
   slug: string;
   name: string;
   description?: string | null;
@@ -38,8 +38,8 @@ export class Tour {
 }
 
 export class TourDeparture {
-  id: string;
-  tourId: string;
+  id: number;
+  tourId: number;
   departureDate: Date;
   capacity: number;
   bookedSeats: number;
@@ -68,10 +68,10 @@ export class AvailableDeparture extends TourDeparture {
 }
 
 export class PriceRule {
-  id: string;
+  id: number;
   name: string;
-  roomId?: string | null;
-  tourId?: string | null;
+  roomId?: number | null;
+  tourId?: number | null;
   startDate?: Date | null;
   endDate?: Date | null;
   /** Postgres DOW numbering: 0 = Sunday .. 6 = Saturday. Empty = every day. */
@@ -89,14 +89,14 @@ export class PriceRule {
 }
 
 export class BookingLine {
-  id: string;
-  bookingId: string;
+  id: number;
+  bookingId: number;
   lineDate: Date;
   quantity: number;
   unitAmount: number;
   amount: number;
   priceSource: PriceSource;
-  priceRuleId?: string | null;
+  priceRuleId?: number | null;
   createdAt: Date;
 
   constructor(partial: Partial<BookingLine>) {
@@ -116,7 +116,7 @@ export class PriceQuoteLine {
   unitAmount: number;
   amount: number;
   source: PriceSource;
-  priceRuleId: string | null;
+  priceRuleId: number | null;
 
   constructor(partial: Partial<PriceQuoteLine>) {
     Object.assign(this, partial);
@@ -134,18 +134,18 @@ export class PriceQuote {
 }
 
 export class Booking {
-  id: string;
+  id: number;
   reference: string;
   /** Bearer credential for the cancel link. Never expose it in list responses. */
   cancellationToken: string;
   type: BookableType;
   status: BookingStatus;
 
-  roomId?: string | null;
+  roomId?: number | null;
   checkIn?: Date | null;
   checkOut?: Date | null;
 
-  tourDepartureId?: string | null;
+  tourDepartureId?: number | null;
   seats?: number | null;
 
   guests: number;

@@ -16,6 +16,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseIntPipe,
   Post,
   Req,
 } from '@nestjs/common';
@@ -92,7 +93,7 @@ export class BookingController {
   }
 
   @Get(':id')
-  get(@Req() req: CorrelatedRequest, @Param('id') id: string) {
+  get(@Req() req: CorrelatedRequest, @Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(
       this.bookingClient.send<BookingResponseDto>(BOOKING_PATTERNS.GET_BOOKING, {
         id,
@@ -103,7 +104,7 @@ export class BookingController {
 
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)
-  confirm(@Req() req: CorrelatedRequest, @Param('id') id: string) {
+  confirm(@Req() req: CorrelatedRequest, @Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(
       this.bookingClient.send<BookingResponseDto>(BOOKING_PATTERNS.CONFIRM_BOOKING, {
         bookingId: id,
@@ -114,7 +115,11 @@ export class BookingController {
 
   @Post(':id/cancel')
   @HttpCode(HttpStatus.OK)
-  cancel(@Req() req: CorrelatedRequest, @Param('id') id: string, @Body() dto: CancelBookingDto) {
+  cancel(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelBookingDto,
+  ) {
     return lastValueFrom(
       this.bookingClient.send<BookingResponseDto>(BOOKING_PATTERNS.CANCEL_BOOKING, {
         bookingId: id,

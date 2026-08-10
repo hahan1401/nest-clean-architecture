@@ -56,7 +56,7 @@ export class ListRoomsService implements ListRoomsUseCase {
 export class GetRoomService implements GetRoomUseCase {
   constructor(private readonly roomRepository: RoomRepository) {}
 
-  async execute(id: string): Promise<Room> {
+  async execute(id: number): Promise<Room> {
     const room = await this.roomRepository.findById(id);
     if (!room) {
       throw new NotFoundError(`Room with id ${id} not found`);

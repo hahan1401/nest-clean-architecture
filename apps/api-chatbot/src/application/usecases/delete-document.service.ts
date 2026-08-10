@@ -6,7 +6,7 @@ import { DeleteDocumentUseCase } from '../../domain/usecases/delete-document.use
 export class DeleteDocumentService implements DeleteDocumentUseCase {
   constructor(private readonly chatBotService: ChatBotServicePort) {}
 
-  execute(id: string): Promise<{ documentId: string; deleted: true }> {
+  execute(id: number): Promise<{ documentId: number; deleted: true }> {
     return this.chatBotService.deleteDocument(id);
   }
 }

@@ -56,7 +56,7 @@ export class RoomController {
   }
 
   @MessagePattern(BOOKING_PATTERNS.GET_ROOM)
-  async get(@Payload() data: { id: string }): Promise<RoomResponseDto> {
+  async get(@Payload() data: { id: number }): Promise<RoomResponseDto> {
     const room = await this.getRoomService.execute(data.id);
     return new RoomResponseDto(room);
   }
@@ -84,7 +84,7 @@ export class RoomController {
 
   @MessagePattern(BOOKING_PATTERNS.CHECK_ROOM_AVAILABILITY)
   async checkAvailability(
-    @Payload() data: { roomId: string; from: string; to: string },
+    @Payload() data: { roomId: number; from: string; to: string },
   ): Promise<RoomAvailabilityResponseDto> {
     const result = await this.checkRoomAvailabilityService.execute({
       roomId: data.roomId,
@@ -97,7 +97,7 @@ export class RoomController {
   async listBookings(
     @Payload()
     data: {
-      roomId: string;
+      roomId: number;
       status?: BookingStatus;
       from?: string;
       to?: string;

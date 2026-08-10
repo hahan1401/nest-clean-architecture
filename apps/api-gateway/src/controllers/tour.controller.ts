@@ -21,6 +21,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   Req,
@@ -76,7 +77,7 @@ export class TourController {
   }
 
   @Get(':id')
-  get(@Req() req: CorrelatedRequest, @Param('id') id: string) {
+  get(@Req() req: CorrelatedRequest, @Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(
       this.bookingClient.send<TourResponseDto>(BOOKING_PATTERNS.GET_TOUR, {
         id,
@@ -89,7 +90,7 @@ export class TourController {
   @HttpCode(HttpStatus.CREATED)
   createDeparture(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: CreateTourDepartureDto,
   ) {
     return lastValueFrom(
@@ -104,7 +105,7 @@ export class TourController {
   @Get(':id/departures')
   listDepartures(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query() query: DepartureListQueryDto,
   ) {
     return lastValueFrom(
@@ -119,7 +120,7 @@ export class TourController {
   @Get(':id/availability')
   checkAvailability(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query() query: TourAvailabilityQueryDto,
   ) {
     return lastValueFrom(
@@ -133,7 +134,7 @@ export class TourController {
   @Get(':id/bookings')
   listBookings(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query() query: BookingHistoryQueryDto,
   ) {
     return lastValueFrom(

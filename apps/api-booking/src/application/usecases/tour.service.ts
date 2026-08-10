@@ -54,7 +54,7 @@ export class ListToursService implements ListToursUseCase {
 export class GetTourService implements GetTourUseCase {
   constructor(private readonly tourRepository: TourRepository) {}
 
-  async execute(id: string): Promise<Tour> {
+  async execute(id: number): Promise<Tour> {
     const tour = await this.tourRepository.findById(id);
     if (!tour) {
       throw new NotFoundError(`Tour with id ${id} not found`);
@@ -151,7 +151,7 @@ export class CheckTourAvailabilityService implements CheckTourAvailabilityUseCas
   ) {}
 
   async execute(
-    input: SearchAvailableDeparturesInput & { tourId: string },
+    input: SearchAvailableDeparturesInput & { tourId: number },
   ): Promise<AvailableDeparture[]> {
     assertUsableRange(input.range);
     if (input.seats < 1) {

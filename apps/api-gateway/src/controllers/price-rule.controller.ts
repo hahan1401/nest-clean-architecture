@@ -15,6 +15,7 @@ import {
   HttpStatus,
   Inject,
   Param,
+  ParseIntPipe,
   Post,
   Query,
   Req,
@@ -49,7 +50,10 @@ export class PriceRuleController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Req() req: CorrelatedRequest, @Param('id') id: string): Promise<void> {
+  async remove(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<void> {
     await lastValueFrom(
       this.bookingClient.send<{ deleted: boolean }>(BOOKING_PATTERNS.DELETE_PRICE_RULE, {
         id,

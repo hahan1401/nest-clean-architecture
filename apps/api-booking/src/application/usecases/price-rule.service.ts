@@ -69,7 +69,7 @@ export class ListPriceRulesService implements ListPriceRulesUseCase {
 export class DeletePriceRuleService implements DeletePriceRuleUseCase {
   constructor(private readonly priceRuleRepository: PriceRuleRepository) {}
 
-  async execute(id: string): Promise<void> {
+  async execute(id: number): Promise<void> {
     const rule = await this.priceRuleRepository.findById(id);
     if (!rule) {
       throw new NotFoundError(`Price rule with id ${id} not found`);

@@ -48,7 +48,7 @@ const lineFor = (
   quantity: number,
   unitAmount: number,
   source: PriceSource,
-  priceRuleId: string | null,
+  priceRuleId: number | null,
 ): PriceQuoteLine =>
   new PriceQuoteLine({
     date,

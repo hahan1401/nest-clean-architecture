@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
 }
 
@@ -8,23 +8,23 @@ datasource db {
 }
 
 model User {
-  id                 String    @id @default(uuid())
-  name               String
-  email              String    @unique
-  password           String
-  latitude           Float?
-  longitude          Float?
-  locationName       String?   @map("location_name")
-  locationUpdatedAt  DateTime? @map("location_updated_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  id                Int       @id @default(autoincrement())
+  name              String
+  email             String    @unique
+  password          String
+  latitude          Float?
+  longitude         Float?
+  locationName      String?   @map("location_name")
+  locationUpdatedAt DateTime? @map("location_updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([latitude, longitude])
   @@map("users")
 }
 
 model Document {
-  id        String          @id @default(uuid())
+  id        Int             @id @default(autoincrement())
   fileName  String          @map("file_name")
   createdAt DateTime        @default(now()) @map("created_at")
   updatedAt DateTime        @updatedAt @map("updated_at")
@@ -35,12 +35,12 @@ model Document {
 }
 
 model DocumentChunk {
-  id         String    @id @default(uuid())
-  documentId String    @map("document_id")
-  chunkIndex Int       @map("chunk_index")
+  id         Int                         @id @default(autoincrement())
+  documentId Int                         @map("document_id")
+  chunkIndex Int                         @map("chunk_index")
   content    String
   embedding  Unsupported("vector(1536)")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  createdAt  DateTime                    @default(now()) @map("created_at")
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -93,7 +93,7 @@ enum PriceSource {
 }
 
 model Room {
-  id          String   @id @default(uuid())
+  id          Int      @id @default(autoincrement())
   code        String   @unique
   name        String
   description String?
@@ -112,7 +112,7 @@ model Room {
 }
 
 model Tour {
-  id                 String   @id @default(uuid())
+  id                 Int      @id @default(autoincrement())
   slug               String   @unique
   name               String
   description        String?
@@ -132,8 +132,8 @@ model Tour {
 
 /// A dated, seat-capped instance of a Tour. Many bookings share one departure.
 model TourDeparture {
-  id            String          @id @default(uuid())
-  tourId        String          @map("tour_id")
+  id            Int             @id @default(autoincrement())
+  tourId        Int             @map("tour_id")
   departureDate DateTime        @map("departure_date") @db.Date
   capacity      Int
   /// Seats held by PENDING + CONFIRMED + COMPLETED bookings. Maintained inside
@@ -158,10 +158,10 @@ model TourDeparture {
 /// and/or a day-of-week set. Exactly one of roomId/tourId is set, enforced by
 /// price_rules_target_check.
 model PriceRule {
-  id         String    @id @default(uuid())
+  id         Int       @id @default(autoincrement())
   name       String
-  roomId     String?   @map("room_id")
-  tourId     String?   @map("tour_id")
+  roomId     Int?      @map("room_id")
+  tourId     Int?      @map("tour_id")
   /// Inclusive window; NULL on either side means unbounded there.
   startDate  DateTime? @map("start_date") @db.Date
   endDate    DateTime? @map("end_date") @db.Date
@@ -188,21 +188,21 @@ model PriceRule {
 /// One booking = one product. ROOM rows use (roomId, checkIn, checkOut);
 /// TOUR rows use (tourDepartureId, seats). Enforced by bookings_shape_check.
 model Booking {
-  id     String        @id @default(uuid())
+  id                Int           @id @default(autoincrement())
   /// Human-facing code, e.g. "BK-7F3K9Q2A". Quoted over the phone and printed in
   /// emails, so it is deliberately short and NOT a secret.
-  reference String     @unique
+  reference         String        @unique
   /// Bearer credential for the self-service cancel link. Unguessable random hex;
   /// never derived from the reference, the id, or a timestamp.
-  cancellationToken String @unique @map("cancellation_token")
-  type   BookableType
-  status BookingStatus @default(PENDING)
+  cancellationToken String        @unique @map("cancellation_token")
+  type              BookableType
+  status            BookingStatus @default(PENDING)
 
-  roomId   String?   @map("room_id")
+  roomId   Int?      @map("room_id")
   checkIn  DateTime? @map("check_in") @db.Date
   checkOut DateTime? @map("check_out") @db.Date
 
-  tourDepartureId String? @map("tour_departure_id")
+  tourDepartureId Int? @map("tour_departure_id")
   seats           Int?
 
   guests        Int
@@ -216,7 +216,7 @@ model Booking {
   /// Present so future multi-currency is a data change, not a schema change.
   currency    String @default("VND")
 
-  notes String?
+  notes         String?
   /// PENDING holds expire at this instant; the sweep flips them to EXPIRED.
   holdExpiresAt DateTime? @map("hold_expires_at")
   confirmedAt   DateTime? @map("confirmed_at")
@@ -241,19 +241,19 @@ model Booking {
 /// Frozen price breakdown. One row per stay night for rooms; one row for tours.
 /// Never recomputed - history stays accurate when base prices or rules change.
 model BookingLine {
-  id        String   @id @default(uuid())
-  bookingId String   @map("booking_id")
+  id          Int         @id @default(autoincrement())
+  bookingId   Int         @map("booking_id")
   /// Stay night for rooms (checkIn .. checkOut-1); departure date for tours.
-  lineDate  DateTime @map("line_date") @db.Date
+  lineDate    DateTime    @map("line_date") @db.Date
   /// 1 per night for rooms; seat count for tours.
-  quantity  Int
+  quantity    Int
   /// Frozen unit price in whole VND at the moment of booking.
   unitAmount  Int         @map("unit_amount")
   /// quantity * unitAmount, frozen.
   amount      Int
   priceSource PriceSource @map("price_source")
   /// SetNull: deleting a rule must not destroy history; the amount is frozen.
-  priceRuleId String?     @map("price_rule_id")
+  priceRuleId Int?        @map("price_rule_id")
   createdAt   DateTime    @default(now()) @map("created_at")
 
   booking   Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)

@@ -97,14 +97,16 @@ export class CreatePriceRuleDto {
 
   /** Exactly one of roomId / tourId must be set; the service enforces it. */
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  roomId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  roomId?: number;
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  tourId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tourId?: number;
 
   @IsOptional()
   @IsDateString(DATE_ONLY)
@@ -153,9 +155,10 @@ export class CreateBookingDto {
 
   // ROOM fields
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  roomId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  roomId?: number;
 
   @IsOptional()
   @IsDateString(DATE_ONLY)
@@ -167,9 +170,10 @@ export class CreateBookingDto {
 
   // TOUR fields
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  tourDepartureId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tourDepartureId?: number;
 
   @IsOptional()
   @IsInt()
@@ -195,9 +199,10 @@ export class QuotePriceDto {
   type: 'ROOM' | 'TOUR';
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  roomId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  roomId?: number;
 
   @IsOptional()
   @IsDateString(DATE_ONLY)
@@ -208,9 +213,10 @@ export class QuotePriceDto {
   checkOut?: string;
 
   @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  tourDepartureId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  tourDepartureId?: number;
 
   @IsOptional()
   @IsInt()

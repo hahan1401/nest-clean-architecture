@@ -100,7 +100,7 @@ export class BookingController {
 
   @MessagePattern(BOOKING_PATTERNS.CONFIRM_BOOKING)
   async confirm(
-    @Payload() data: { bookingId: string; requestId?: string },
+    @Payload() data: { bookingId: number; requestId?: string },
   ): Promise<BookingResponseDto> {
     const booking = await this.confirmBookingService.execute({
       bookingId: data.bookingId,
@@ -111,7 +111,7 @@ export class BookingController {
 
   @MessagePattern(BOOKING_PATTERNS.CANCEL_BOOKING)
   async cancel(
-    @Payload() data: { bookingId: string; reason?: string },
+    @Payload() data: { bookingId: number; reason?: string },
   ): Promise<BookingResponseDto> {
     const booking = await this.cancelBookingService.execute({
       bookingId: data.bookingId,
@@ -121,7 +121,7 @@ export class BookingController {
   }
 
   @MessagePattern(BOOKING_PATTERNS.GET_BOOKING)
-  async get(@Payload() data: { id: string }): Promise<BookingResponseDto> {
+  async get(@Payload() data: { id: number }): Promise<BookingResponseDto> {
     const booking = await this.getBookingService.execute(data.id);
     return new BookingResponseDto(booking);
   }
@@ -171,7 +171,7 @@ export class BookingController {
 
   @MessagePattern(BOOKING_PATTERNS.LIST_PRICE_RULES)
   async listPriceRules(
-    @Payload() data: { roomId?: string; tourId?: string },
+    @Payload() data: { roomId?: number; tourId?: number },
   ): Promise<PriceRuleResponseDto[]> {
     const rules = await this.listPriceRulesService.execute({
       roomId: data.roomId,
@@ -181,7 +181,7 @@ export class BookingController {
   }
 
   @MessagePattern(BOOKING_PATTERNS.DELETE_PRICE_RULE)
-  async deletePriceRule(@Payload() data: { id: string }): Promise<{ deleted: boolean }> {
+  async deletePriceRule(@Payload() data: { id: number }): Promise<{ deleted: boolean }> {
     await this.deletePriceRuleService.execute(data.id);
     return { deleted: true };
   }

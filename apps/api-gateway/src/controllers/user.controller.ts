@@ -44,14 +44,14 @@ export class UserController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(this.userClient.send(USER_PATTERNS.GET_USER_BY_ID, id));
   }
 
   @Put(':id')
   update(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() updateData: UpdateUserDto,
   ) {
     return lastValueFrom(
@@ -65,14 +65,14 @@ export class UserController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string) {
+  remove(@Param('id', ParseIntPipe) id: number) {
     return lastValueFrom(this.userClient.send(USER_PATTERNS.DELETE_USER, id));
   }
 
   @Patch(':id/location')
   updateLocation(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateLocationDto,
   ) {
     return lastValueFrom(
@@ -88,7 +88,7 @@ export class UserController {
   @Get(':id/nearby')
   findNearby(
     @Req() req: CorrelatedRequest,
-    @Param('id') id: string,
+    @Param('id', ParseIntPipe) id: number,
     @Query('radius', new DefaultValuePipe(10), ParseIntPipe) radius: number,
   ) {
     return lastValueFrom(

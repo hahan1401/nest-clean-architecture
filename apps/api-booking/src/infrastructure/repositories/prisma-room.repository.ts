@@ -19,7 +19,7 @@ export class PrismaRoomRepository extends RoomRepository {
     return new Room(room);
   }
 
-  async findById(id: string): Promise<Room | null> {
+  async findById(id: number): Promise<Room | null> {
     const room = await this.prisma.room.findUnique({ where: { id } });
     return room ? new Room(room) : null;
   }
@@ -77,7 +77,7 @@ export class PrismaRoomRepository extends RoomRepository {
    * immediately before a booking write, and replication lag would report a room
    * as free that was taken 200ms ago.
    */
-  async isAvailable(roomId: string, range: DateRange): Promise<boolean> {
+  async isAvailable(roomId: number, range: DateRange): Promise<boolean> {
     const clash = await this.prisma.$primary().booking.findFirst({
       where: {
         roomId,
