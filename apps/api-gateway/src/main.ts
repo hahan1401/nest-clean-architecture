@@ -40,6 +40,8 @@ async function bootstrap() {
     }
   });
 
+  app.setGlobalPrefix('api');
+
   await app.listen(process.env.GATEWAY_PORT ?? 3000);
 
   logger.log(

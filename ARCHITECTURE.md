@@ -4,7 +4,7 @@
 
 ```
                         ┌─────────────────────────────────────┐
-                        │      API Gateway (HTTP :3000)       │
+                        │   API Gateway (HTTP :3000, /api)    │
                         │  Validation, correlation id, proxy  │
                         └─────────────────────────────────────┘
                             │                          │
@@ -243,11 +243,18 @@ The gateway is intentionally thin. It holds four TCP clients and three RabbitMQ 
 Key behaviors:
 
 - Applies global `ValidationPipe` (`whitelist + transform`).
+- Applies `app.setGlobalPrefix('api')` — **every controller route is served under `/api`**.
 - Uses `CorrelationRequestIdMiddleware` for request correlation.
 - Registers `AllExceptionsHttpFilter` and `LoggingInterceptor` globally.
 - Routes request/response calls through `lastValueFrom(client.send(...))` and
   fire-and-forget events through `client.emit(...)` with `202 Accepted`.
 - Exposes SSE endpoints for chatbot streaming, and proxies `/socket.io` to api-notification.
+
+> **The global prefix does not cover `/socket.io`.** The proxy is raw Express middleware
+> mounted with `app.use('/socket.io', ...)` before `setGlobalPrefix`, and the `upgrade`
+> handler matches on the literal `/socket.io/` prefix. Socket.IO therefore stays at the
+> **origin root** — `http://localhost:3000/socket.io`, *not* `/api/socket.io`. Anything
+> declared in a controller is prefixed; anything mounted as middleware is not.
 
 > **Route ordering matters.** Literal segments must be declared before parameterised ones —
 > `@Get('availability')` above `@Get(':id')`, or `/rooms/availability` resolves to a room
@@ -331,6 +338,12 @@ anywhere, including during bootstrap.
   pino config. Credentials that live in a **URL path** rather than a property — currently
   `/bookings/cancel/:token` — cannot be reached by `redact.paths` and are masked by the
   `req` serializer instead.
+
+> ⚠️ **The `/api` global prefix breaks this masking.** `CREDENTIAL_PATH_PREFIXES` in
+> `libs/common/src/logger/pino-http.config.ts` is matched with `url.startsWith(...)` against
+> the raw request URL. The gateway now receives `/api/bookings/cancel/<token>`, which does not
+> start with `/bookings/cancel/`, so the cancellation token is currently logged in plaintext.
+> The prefix list has to gain the `/api` form (or the match has to become substring-based).
 
 ### Request Correlation
 
@@ -456,6 +469,11 @@ socket.on('notification', (n) => console.log(n));
 ---
 
 ## HTTP Endpoints (Gateway)
+
+> **All paths below are relative to the `/api` global prefix.** `POST /users` is served at
+> `POST /api/users`, `GET /rooms/availability` at `GET /api/rooms/availability`, and so on.
+> The tables keep the controller-relative form because that is what the `@Controller()`
+> decorators declare. The single exception is the Socket.IO proxy, which stays at `/socket.io`.
 
 ### User Endpoints
 
@@ -602,7 +620,13 @@ without that timeout a RabbitMQ outage would hang the whole RPC call.
 
 The customer's email carries `PUBLIC_BASE_URL/bookings/cancel/<token>`, where the token is 32
 random bytes. The owner's email deliberately does **not** — forwarding it would hand over the
-cancellation credential. The token never appears in an API response and is masked out of logs.
+cancellation credential. The token never appears in an API response.
+
+> ⚠️ **`PUBLIC_BASE_URL` is not prefix-aware.** `ConfirmBookingService` appends the literal
+> `/bookings/cancel/<token>`, so with the default `http://localhost:3000` the emailed link now
+> resolves to a `404` — the route moved to `/api/bookings/cancel/<token>`. Point
+> `PUBLIC_BASE_URL` at the frontend route that fronts this flow (the intended setup), or at
+> `http://localhost:3000/api` if you want the link to hit the gateway directly.
 
 > The `GET` half of the cancel route **must stay side-effect free.** Mail clients, corporate
 > scanners and link-preview bots fetch every URL in a message, so a state-changing `GET` would
@@ -719,7 +743,7 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 
 | Variable | Default | Used By |
 |----------|---------|---------|
-| `GATEWAY_PORT` | `3000` | api-gateway |
+| `GATEWAY_PORT` | `3000` | api-gateway (routes served under the `/api` prefix) |
 | `USER_SERVICE_HOST` | `localhost` | api-gateway |
 | `USER_SERVICE_PORT` | `3001` | api-gateway, api-user |
 | `LOCATION_SERVICE_PORT` | `3002` | api-user, api-location |
@@ -745,7 +769,7 @@ npx tsc --noEmit && npx eslint "apps/**/*.ts" "libs/**/*.ts" && npx jest
 | `EMAIL_FROM` | - (required) | api-email (fallback sender; api-booking leaves `from` unset) |
 | `AWS_SES_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | - | api-email |
 | `HOMESTAY_OWNER_EMAIL` | - (required) | api-booking |
-| `PUBLIC_BASE_URL` | `http://localhost:3000` | api-booking (builds the emailed cancel link) |
+| `PUBLIC_BASE_URL` | `http://localhost:3000` | api-booking (builds the emailed cancel link; append `/api` to hit the gateway directly) |
 | `EMAIL_EMIT_TIMEOUT_MS` | `2000` | api-booking |
 | `BOOKING_HOLD_TTL_MINUTES` | `30` | api-booking |
 | `HOLD_SWEEP_CRON` | `*/10 * * * *` | api-booking |

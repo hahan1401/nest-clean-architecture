@@ -14,11 +14,30 @@ client.
 
 | | Value |
 |---|---|
-| Base URL (dev) | `http://localhost:3000` — override with `GATEWAY_PORT` |
+| Origin (dev) | `http://localhost:3000` — override with `GATEWAY_PORT` |
+| **API base URL (dev)** | **`http://localhost:3000/api`** — every REST route lives under the `/api` global prefix |
 | Content type | `application/json` (except the chatbot upload, which is `multipart/form-data`) |
 | CORS | `app.enableCors()` with defaults — **every origin allowed, no credentials mode**. Lock this down before production. |
 | Auth | **None.** There is no login, token, or session anywhere in the gateway today. Every endpoint is public, including the admin-shaped ones (`POST /rooms`, `POST /price-rules`, `POST /bookings/:id/confirm`). Treat this as a pre-auth codebase — do not ship it to the public internet as-is. |
-| Realtime | Socket.IO, proxied by the gateway at `/socket.io` (see §8) |
+| Realtime | Socket.IO, proxied by the gateway at `/socket.io` — **on the origin, not under `/api`** (see §8) |
+
+### The `/api` prefix
+
+The gateway calls `app.setGlobalPrefix('api')`, so every path in §6 is served one level down:
+
+| Declared in the controller | Actually served at |
+|---|---|
+| `POST /bookings` | `POST /api/bookings` |
+| `GET /rooms/availability` | `GET /api/rooms/availability` |
+| `GET /chatbot/sse` | `GET /api/chatbot/sse` |
+| `/socket.io` (proxy) | `/socket.io` — **unchanged** |
+
+Every path written in this guide is **relative to `/api`**, matching the controller declarations.
+Keep the prefix in your base URL exactly once and never hard-code it into individual paths.
+
+The Socket.IO exception is not an oversight: the proxy is Express middleware mounted before the
+prefix is applied, so it is bound to the origin root. Point REST at `VITE_API_URL` (with `/api`)
+and sockets at the bare origin — two separate values in your config. §8 shows the split.
 
 ### Request correlation
 
@@ -177,7 +196,8 @@ export class ApiError extends Error {
   }
 }
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+/** Includes the gateway's `/api` global prefix. Trailing slash trimmed so paths never double up. */
+const BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api').replace(/\/+$/, '');
 
 export async function api<T>(
   path: string,
@@ -185,7 +205,10 @@ export async function api<T>(
 ): Promise<T> {
   const { query, ...rest } = init;
 
-  const url = new URL(path, BASE_URL);
+  // Concatenate — do NOT use `new URL(path, BASE_URL)`. A root-relative path replaces the
+  // whole path of the base, so `new URL('/rooms', 'http://host/api')` silently drops `/api`
+  // and you get a 404 on every call.
+  const url = new URL(`${BASE_URL}${path}`);
   for (const [k, v] of Object.entries(query ?? {})) {
     if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, String(v));
   }
@@ -386,6 +409,10 @@ export interface UserWithDistanceResponse extends UserResponse {
 ---
 
 ## 6. Endpoint reference
+
+> Every path in this section is relative to the `/api` prefix — `POST /rooms` is
+> `POST /api/rooms` on the wire. With the client from §4 you pass the path exactly as
+> written here and the prefix comes from `BASE_URL`.
 
 ### Rooms — `/rooms`
 
@@ -593,11 +620,13 @@ Do not auto-retry — the slot is gone. Refresh availability and let the user pi
 
 ### The emailed cancel link
 
-The confirmation email contains `PUBLIC_BASE_URL/bookings/cancel/<token>`. Point that at a frontend
-route that:
+The confirmation email contains `PUBLIC_BASE_URL/bookings/cancel/<token>` — the backend appends
+that path literally, **without** the `/api` prefix. Point `PUBLIC_BASE_URL` at your frontend origin
+so the link lands on a page of yours (a raw gateway link would need `PUBLIC_BASE_URL` to end in
+`/api`, and would render JSON at the customer). That page should:
 
-1. calls `GET /bookings/cancel/:token` to render the booking for review, then
-2. calls `POST /bookings/cancel/:token` only on an explicit button press.
+1. call `GET /bookings/cancel/:token` to render the booking for review, then
+2. call `POST /bookings/cancel/:token` only on an explicit button press.
 
 **Never cancel on page load.** Mail clients, corporate scanners and link-preview bots fetch every URL
 in a message; a `GET` that cancelled would cancel bookings nobody ever clicked. The backend keeps the
@@ -609,6 +638,12 @@ in a message; a `GET` that cancelled would cancel bookings nobody ever clicked. 
 
 The gateway proxies `/socket.io` (HTTP and WebSocket upgrade) to `api-notification`, so connect to
 the **gateway origin** — the notification service port is an implementation detail.
+
+> ⚠️ **Do not reuse your REST base URL here.** The proxy sits at the origin root, outside the `/api`
+> global prefix. Socket.IO reads the path of the URL you give it as the *namespace*, so
+> `io('http://localhost:3000/api/notification/u1')` connects to a namespace called
+> `/api/notification/u1` and is rejected. Keep the origin in its own env var
+> (`VITE_SOCKET_URL = http://localhost:3000`) or strip the suffix: `VITE_API_URL.replace(/\/api$/, '')`.
 
 - **Namespace:** anything starting with `/notification`. The convention is `/notification/<userId>`.
 - **Identity:** `handshake.auth.userId`, falling back to the `userId` query param. A socket that
@@ -628,11 +663,16 @@ export interface NotificationEvent {
   userId?: string;     // absent on broadcasts
 }
 
+/** Gateway ORIGIN — no `/api`. The socket proxy is mounted outside the global prefix. */
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ??
+  (import.meta.env.VITE_API_URL ?? 'http://localhost:3000').replace(/\/api\/?$/, '');
+
 export function connectNotifications(
   userId: string,
   onNotification: (n: NotificationEvent) => void,
 ): Socket {
-  const socket = io(`${import.meta.env.VITE_API_URL}/notification/${userId}`, {
+  const socket = io(`${SOCKET_URL}/notification/${userId}`, {
     transports: ['websocket', 'polling'],
     auth: { userId },              // required — no userId means instant disconnect
     reconnection: true,
@@ -673,7 +713,8 @@ useEffect(() => {
 ## 9. Streaming chat (SSE)
 
 `GET /chatbot/sse?prompt=…` streams tokens as `text/event-stream`. `strict-sse` is the same
-contract but answers only from uploaded documents.
+contract but answers only from uploaded documents. Like every other route these sit under the
+prefix — `http://localhost:3000/api/chatbot/sse` — so the `BASE_URL` from §4 already carries it.
 
 `EventSource` is the simplest option — the prompt goes in the query string, so URL-encode it:
 
@@ -752,7 +793,7 @@ docker compose up -d          # Postgres primary + replica, RabbitMQ
 npx prisma migrate deploy
 npx prisma generate
 
-npm run gateway:dev           # :3000  ← the only port a frontend touches
+npm run gateway:dev           # :3000  ← the only port a frontend touches; REST under /api
 npm run user:dev              # :3001
 npm run location:dev          # :3002
 npm run payment:dev           # :3003
@@ -761,17 +802,28 @@ npm run notification:dev      # :3005
 npm run booking:dev           # :3006
 ```
 
+A quick smoke test, prefix included:
+
+```bash
+curl -i http://localhost:3000/api/rooms          # 200 (or 502 if api-booking is down)
+curl -i http://localhost:3000/rooms              # 404 — the prefix is not optional
+```
+
 The gateway starts even when a downstream service is down — those routes then fail at call time with
 `502 DEPENDENCY_FAILURE`. Seeing 502s from one resource while the rest work usually means you forgot
-to start that service.
+to start that service. A blanket `404` on every route, by contrast, almost always means a missing
+`/api`.
 
-Two ready-made harnesses live in the repo root: `websocket-test-client.html` (Socket.IO) and
-`test-notification-api.html`.
+Two ready-made harnesses live in the repo root. `websocket-test-client.html` connects to the origin
+and is unaffected by the prefix. `test-notification-api.html` is **stale** — its `API_BASE` is still
+`http://localhost:3000/notifications` and needs `/api` inserted before it will do anything but 404.
 
 ---
 
 ## 11. Integration checklist
 
+- [ ] Put `/api` in the REST base URL once — and keep the Socket.IO URL on the bare origin.
+- [ ] Build request URLs by concatenation, not `new URL(path, base)` — the latter eats the prefix.
 - [ ] Generate and send `x-request-id` on every request; log it with failures.
 - [ ] Branch on `error.code`, never on `error.message`.
 - [ ] Treat `409` on `POST /bookings` as a normal race — refresh availability, do not auto-retry.
