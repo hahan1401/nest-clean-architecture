@@ -43,7 +43,7 @@ future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
 
 | | |
 |---|---|
-| **Catalogue** | Rooms with a nightly base price and a guest cap; tours with a per-person price and dated, seat-capped departures. |
+| **Catalogue** | Rooms with a nightly base price and a guest cap; tours with a per-person price and dated, seat-capped departures. Each carries an ordered set of symbolic pictures — URLs into an external object store; the backend never touches image bytes. |
 | **Availability** | Every room the guest count fits, whatever its state for those dates — free, `ON_HOLD` while another guest is mid-checkout, or `BOOKED` with the moment it frees up. Free and held rooms carry a price quote. The house never looks smaller than it is. |
 | **Pricing** | `PriceRule` overrides per room or tour, by date window and/or weekday, resolved by a pure function and then **frozen** into `booking_lines`. Later price edits never rewrite history. |
 | **Holds** | `POST /api/bookings` genuinely reserves the slot for 3 minutes and returns `holdExpiresAt`. A delayed RabbitMQ message, published when the hold starts and timed to the second, releases it. |

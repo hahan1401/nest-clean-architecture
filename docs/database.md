@@ -45,7 +45,7 @@ Three independent groups share one database:
 |-------|--------|---------------|
 | Identity & geo | `users` | `api-user` |
 | RAG knowledge base | `documents`, `document_chunks` | `api-chatbot` |
-| Booking engine | `rooms`, `tours`, `tour_departures`, `price_rules`, `bookings`, `booking_lines` | `api-booking` |
+| Booking engine | `rooms`, `room_images`, `tours`, `tour_images`, `tour_departures`, `price_rules`, `bookings`, `booking_lines` | `api-booking` |
 
 There are **no foreign keys between the groups** — in particular a booking stores the
 customer's name, email and phone directly and does not reference `users`, so guests can book
@@ -74,8 +74,10 @@ erDiagram
 
     rooms ||--o{ bookings : "booked as"
     rooms ||--o{ price_rules : "priced by"
+    rooms ||--o{ room_images : "pictured by"
     tours ||--o{ tour_departures : "scheduled as"
     tours ||--o{ price_rules : "priced by"
+    tours ||--o{ tour_images : "pictured by"
     tour_departures ||--o{ bookings : "seats sold to"
     bookings ||--|{ booking_lines : "broken down into"
     price_rules ||--o{ booking_lines : "sourced"
@@ -87,12 +89,26 @@ erDiagram
         int base_price
         bool is_active
     }
+    room_images {
+        int id PK
+        int room_id FK
+        string url
+        int position
+        string caption
+    }
     tours {
         int id PK
         string slug UK
         int duration_days
         int base_price_per_person
         bool is_active
+    }
+    tour_images {
+        int id PK
+        int tour_id FK
+        string url
+        int position
+        string caption
     }
     tour_departures {
         int id PK
@@ -228,13 +244,36 @@ The room catalogue — what can be sold, to how many people, at what nightly rat
 | `is_active` | `bool` | soft retirement — hides the room while preserving its bookings |
 | `created_at` / `updated_at` | `timestamptz` | |
 
-**Relationships** — `rooms 1 ──< bookings` (`ON DELETE RESTRICT`) and
-`rooms 1 ──< price_rules` (`ON DELETE CASCADE`). Restrict on bookings is deliberate:
-booking history must outlive catalogue edits, so a room with bookings cannot be deleted at
-all. Its price rules, by contrast, are meaningless without it and go with it.
+**Relationships** — `rooms 1 ──< bookings` (`ON DELETE RESTRICT`),
+`rooms 1 ──< price_rules` (`ON DELETE CASCADE`), and `rooms 1 ──< room_images`
+(`ON DELETE CASCADE`). Restrict on bookings is deliberate: booking history must outlive
+catalogue edits, so a room with bookings cannot be deleted at all. Its price rules and
+images, by contrast, are meaningless without it and go with it.
 
 **Checks** — `rooms_base_price_check`: `base_price >= 0 AND max_guests > 0`.
 **Index** — `rooms_is_active_max_guests_idx` for "active rooms that sleep N".
+
+### `room_images`
+
+A room's symbolic pictures, in caller-controlled display order. The backend never touches
+image bytes — `url` points at an external object store (S3, Cloudinary, …) and only the URL
+string is persisted here. `RoomImage` and `TourImage` are separate tables rather than one
+polymorphic table keyed by `bookable_type` (as `price_rules`/`bookings` are): this is a plain
+one-to-many from a single owner, not a mutually-exclusive "belongs to a room *or* a tour"
+reference, so a dedicated FK per model is simpler and lets Postgres enforce the cascade
+directly.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `int` PK | |
+| `room_id` | `int` FK → `rooms.id` | cascade delete |
+| `url` | `text` | external object store URL; never a local path or raw bytes |
+| `position` | `int` | zero-based display order among a room's images; the API renders ascending by this column. `add` appends after the current max unless the caller supplies a position; `reorder` requires the request to be an exact permutation of the room's current image ids |
+| `caption` | `text?` | optional accessibility/caption text |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+**Relationships** — `room_images N }──1 rooms`, cascade delete.
+**Index** — `room_images_room_id_position_idx` for "a room's images, in order".
 
 ### `tours`
 
@@ -251,9 +290,25 @@ The tour catalogue. A tour is a *template* — it has no date. Dates live in
 | `is_active` | `bool` | soft retirement |
 | `created_at` / `updated_at` | `timestamptz` | |
 
-**Relationships** — `tours 1 ──< tour_departures` (CASCADE) and
-`tours 1 ──< price_rules` (CASCADE).
+**Relationships** — `tours 1 ──< tour_departures` (CASCADE), `tours 1 ──< price_rules`
+(CASCADE), and `tours 1 ──< tour_images` (CASCADE).
 **Checks** — `tours_base_price_check`: `base_price_per_person >= 0 AND duration_days > 0`.
+
+### `tour_images`
+
+Same shape and role as `room_images`, for `tours` — see above.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `int` PK | |
+| `tour_id` | `int` FK → `tours.id` | cascade delete |
+| `url` | `text` | external object store URL |
+| `position` | `int` | zero-based display order among a tour's images |
+| `caption` | `text?` | optional accessibility/caption text |
+| `created_at` / `updated_at` | `timestamptz` | |
+
+**Relationships** — `tour_images N }──1 tours`, cascade delete.
+**Index** — `tour_images_tour_id_position_idx` for "a tour's images, in order".
 
 ### `tour_departures`
 
