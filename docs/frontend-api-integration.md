@@ -337,6 +337,14 @@ export type BookableType = 'ROOM' | 'TOUR';
 export type DepartureStatus = 'OPEN' | 'CLOSED' | 'CANCELLED';
 export type PriceSource = 'BASE' | 'RULE' | 'DEPARTURE_OVERRIDE';
 
+/** A symbolic picture — the backend stores only a URL into an external object store, never bytes. */
+export interface RoomImageResponse {
+  id: number;
+  url: string;
+  position: number;        // ascending display order
+  caption: string | null;
+}
+
 export interface RoomResponse {
   id: number;
   code: string;
@@ -345,6 +353,7 @@ export interface RoomResponse {
   maxGuests: number;
   basePrice: number;     // VND per night
   isActive: boolean;
+  images: RoomImageResponse[]; // ascending by position; [] when none, never omitted
 }
 
 export interface PriceQuoteLineResponse {
@@ -373,6 +382,14 @@ export interface RoomAvailabilityResponse {
   quote: PriceQuoteResponse | null;   // priced for AVAILABLE and ON_HOLD, null for BOOKED
 }
 
+/** Same shape and role as `RoomImageResponse`, for a tour. */
+export interface TourImageResponse {
+  id: number;
+  url: string;
+  position: number;        // ascending display order
+  caption: string | null;
+}
+
 export interface TourResponse {
   id: number;
   slug: string;
@@ -381,6 +398,7 @@ export interface TourResponse {
   durationDays: number;
   basePricePerPerson: number;
   isActive: boolean;
+  images: TourImageResponse[]; // ascending by position; [] when none, never omitted
 }
 
 export interface TourDepartureResponse {
@@ -488,6 +506,9 @@ export interface UserWithDistanceResponse extends UserResponse {
 | `GET` | `/rooms/:id` | — | `200` `RoomResponse` |
 | `GET` | `/rooms/:id/availability` | `from`, `to` (**required**) | `200` `RoomAvailabilityResponse` (single) |
 | `GET` | `/rooms/:id/bookings` | `status?`, `from?`, `to?`, `skip?`, `take?` | `200` `BookingResponse[]` |
+| `POST` | `/rooms/:id/images` | `AddImageDto` | `201` `RoomImageResponse`, `404` when the room is absent |
+| `PATCH` | `/rooms/:id/images/reorder` | `ReorderImagesDto` | `200` `RoomImageResponse[]`, `404`/`400` (see below) |
+| `DELETE` | `/rooms/:id/images/:imageId` | — | `204`, `404` when the image is absent or belongs to another room |
 
 `CreateRoomDto`: `code` (≤32), `name` (≤120), `description?` (≤2000), `maxGuests` (1–50),
 `basePrice` (integer ≥ 0). A duplicate `code` returns `409`.
@@ -525,6 +546,38 @@ rather than `ON_HOLD` — there is nothing to wait for.
 `KHOI`, `QUY`, `DOI`), so a public route can be `/stays/SUONG` instead of a numeric id. Unknown code →
 `404` `NOT_FOUND` with the standard error envelope. The lookup is exact and case-sensitive.
 
+#### Room and tour images
+
+The backend never stores or proxies image bytes — `url` must already point at wherever the picture
+actually lives (S3, Cloudinary, ...). Upload the file to that store yourself first; these endpoints
+only persist and order the URL. The request/response shapes are identical for rooms and tours; only
+the base path (`/rooms/:id/images` vs. `/tours/:id/images`) differs.
+
+```ts
+export interface AddImageDto {
+  url: string;        // must be an absolute URL, ≤2000 chars
+  caption?: string;    // ≤300 chars
+  position?: number;   // 0-based; appended after the current highest position when omitted
+}
+
+export interface ReorderImagesDto {
+  /** Every current image id for this room/tour, each exactly once, in the new display order. */
+  imageIds: number[];
+}
+```
+
+- `POST /rooms/:id/images` adds one image and returns it (`RoomImageResponse`). `404` `NOT_FOUND` if
+  the room doesn't exist. `400` `VALIDATION_ERROR` for a malformed `url` or an out-of-range field.
+- `PATCH /rooms/:id/images/reorder` rewrites the full display order in one call. `imageIds` must be
+  an exact permutation of the room's current image ids — a missing id, an extra id, or an id
+  belonging to a different room all fail with `400` `VALIDATION_ERROR` rather than silently applying
+  a partial reorder. `404` `NOT_FOUND` if the room doesn't exist.
+- `DELETE /rooms/:id/images/:imageId` removes one image and returns `204` with no body. `404`
+  `NOT_FOUND` if that image id doesn't exist or belongs to a different room — deleting is not
+  idempotent-quiet here, the frontend can rely on `404` meaning "nothing changed."
+- The same three routes, patterns, and error cases apply to `/tours/:id/images...`; swap
+  `RoomImageResponse` for `TourImageResponse`.
+
 ### Tours — `/tours`
 
 | Method | Path | Query / Body | Returns |
@@ -538,6 +591,9 @@ rather than `ON_HOLD` — there is nothing to wait for.
 | `GET` | `/tours/:id/departures` | `from?`, `to?` | `200` `TourDepartureResponse[]` |
 | `GET` | `/tours/:id/availability` | `from`, `to` (**required**), `seats?` | `200` `AvailableDepartureResponse[]` |
 | `GET` | `/tours/:id/bookings` | `status?`, `from?`, `to?`, `skip?`, `take?` | `200` `BookingResponse[]` |
+| `POST` | `/tours/:id/images` | `AddImageDto` | `201` `TourImageResponse`, `404` when the tour is absent |
+| `PATCH` | `/tours/:id/images/reorder` | `ReorderImagesDto` | `200` `TourImageResponse[]`, `404`/`400` (see §"Room and tour images") |
+| `DELETE` | `/tours/:id/images/:imageId` | — | `204`, `404` when the image is absent or belongs to another tour |
 
 `CreateTourDto`: `slug` (≤120, unique), `name` (≤120), `description?`, `durationDays` (≥1),
 `basePricePerPerson` (integer ≥ 0).

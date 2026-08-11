@@ -35,6 +35,11 @@ import {
   QuotePriceService,
 } from '../../application/usecases/price-rule.service';
 import {
+  AddRoomImageService,
+  RemoveRoomImageService,
+  ReorderRoomImagesService,
+} from '../../application/usecases/room-image.service';
+import {
   CheckRoomAvailabilityService,
   CreateRoomService,
   GetRoomByCodeService,
@@ -43,6 +48,11 @@ import {
   ListRoomsService,
   SearchAvailableRoomsService,
 } from '../../application/usecases/room.service';
+import {
+  AddTourImageService,
+  RemoveTourImageService,
+  ReorderTourImagesService,
+} from '../../application/usecases/tour-image.service';
 import {
   CheckTourAvailabilityService,
   CreateTourDepartureService,
@@ -59,16 +69,20 @@ import { BookingNotifierPort } from '../../domain/ports/booking-notifier.port';
 import { PricingPort } from '../../domain/ports/pricing.port';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import { PriceRuleRepository } from '../../domain/repositories/price-rule.repository';
+import { RoomImageRepository } from '../../domain/repositories/room-image.repository';
 import { RoomRepository } from '../../domain/repositories/room.repository';
 import { TourDepartureRepository } from '../../domain/repositories/tour-departure.repository';
+import { TourImageRepository } from '../../domain/repositories/tour-image.repository';
 import { TourRepository } from '../../domain/repositories/tour.repository';
 
 import { RmqBookingNotifierService } from '../../infrastructure/notifiers/rmq-booking-notifier.service';
 import { PriceRulePricingService } from '../../infrastructure/pricing/price-rule-pricing.service';
 import { PrismaBookingRepository } from '../../infrastructure/repositories/prisma-booking.repository';
 import { PrismaPriceRuleRepository } from '../../infrastructure/repositories/prisma-price-rule.repository';
+import { PrismaRoomImageRepository } from '../../infrastructure/repositories/prisma-room-image.repository';
 import { PrismaRoomRepository } from '../../infrastructure/repositories/prisma-room.repository';
 import { PrismaTourDepartureRepository } from '../../infrastructure/repositories/prisma-tour-departure.repository';
+import { PrismaTourImageRepository } from '../../infrastructure/repositories/prisma-tour-image.repository';
 import { PrismaTourRepository } from '../../infrastructure/repositories/prisma-tour.repository';
 
 import { BookingHoldSchedulerPort } from '../../domain/ports/booking-hold-scheduler.port';
@@ -148,6 +162,8 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
     { provide: TourRepository, useClass: PrismaTourRepository },
     { provide: TourDepartureRepository, useClass: PrismaTourDepartureRepository },
     { provide: PriceRuleRepository, useClass: PrismaPriceRuleRepository },
+    { provide: RoomImageRepository, useClass: PrismaRoomImageRepository },
+    { provide: TourImageRepository, useClass: PrismaTourImageRepository },
     { provide: BookingRepository, useClass: PrismaBookingRepository },
     { provide: PricingPort, useClass: PriceRulePricingService },
     { provide: BookingNotifierPort, useClass: RmqBookingNotifierService },
@@ -161,6 +177,9 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
     SearchAvailableRoomsService,
     CheckRoomAvailabilityService,
     ListRoomBookingsService,
+    AddRoomImageService,
+    RemoveRoomImageService,
+    ReorderRoomImagesService,
 
     // Tours
     CreateTourService,
@@ -172,6 +191,9 @@ import { BookingMaintenanceScheduler } from '../schedulers/booking-maintenance.s
     SearchAvailableDeparturesService,
     CheckTourAvailabilityService,
     ListTourBookingsService,
+    AddTourImageService,
+    RemoveTourImageService,
+    ReorderTourImagesService,
 
     // Pricing
     CreatePriceRuleService,

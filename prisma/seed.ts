@@ -160,6 +160,55 @@ const DEPARTURES = [
   { slug: 'coffee-hills', inDays: 31, capacity: 6, bookedSeats: 2 },
 ];
 
+// --- Symbolic pictures --------------------------------------------------------
+
+/**
+ * Seed images point at Lorem Picsum rather than a real bucket, since no
+ * external store is configured yet - swap the base URL here once one is.
+ * Each seed string is deterministic (owner code/slug + index) so re-running
+ * the seed always resolves to the same photos instead of drifting.
+ */
+const IMAGES_PER_ROOM = 3;
+const IMAGES_PER_TOUR = 3;
+
+const placeholderImageUrl = (seed: string, width = 1200, height = 800): string =>
+  `https://picsum.photos/seed/${seed}/${width}/${height}`;
+
+/**
+ * Images have no natural key to upsert on, so each run replaces an owner's
+ * set wholesale - simpler than diffing, and safe because nothing else
+ * references a RoomImage/TourImage row (cascade delete, no FK pointing in).
+ */
+async function seedRoomImages(roomIdByCode: Map<string, number>) {
+  for (const room of ROOMS) {
+    const roomId = roomIdByCode.get(room.code)!;
+    await prisma.roomImage.deleteMany({ where: { roomId } });
+    await prisma.roomImage.createMany({
+      data: Array.from({ length: IMAGES_PER_ROOM }, (_, index) => ({
+        roomId,
+        url: placeholderImageUrl(`room-${room.code}-${index}`),
+        position: index,
+        caption: `${room.name} - view ${index + 1}`,
+      })),
+    });
+  }
+}
+
+async function seedTourImages(tourIdBySlug: Map<string, number>) {
+  for (const tour of TOURS) {
+    const tourId = tourIdBySlug.get(tour.slug)!;
+    await prisma.tourImage.deleteMany({ where: { tourId } });
+    await prisma.tourImage.createMany({
+      data: Array.from({ length: IMAGES_PER_TOUR }, (_, index) => ({
+        tourId,
+        url: placeholderImageUrl(`tour-${tour.slug}-${index}`),
+        position: index,
+        caption: `${tour.name} - view ${index + 1}`,
+      })),
+    });
+  }
+}
+
 // --- Weekend pricing --------------------------------------------------------
 
 /**
@@ -234,6 +283,7 @@ async function seedBookingDomain() {
     select: { id: true, slug: true },
   });
   const tourIdBySlug = new Map(tours.map((tour) => [tour.slug, tour.id]));
+  await seedTourImages(tourIdBySlug);
 
   await dropRolledDepartures(DEPARTURES.map((departure) => departureInstant(departure.inDays)));
 
@@ -262,6 +312,7 @@ async function seedBookingDomain() {
       })
     ).map((room) => [room.code, room.id]),
   );
+  await seedRoomImages(roomIdByCode);
 
   for (const room of ROOMS) {
     const rule = {
@@ -291,7 +342,8 @@ async function seedBookingDomain() {
   console.log(
     `Thong Dong Retreat seeded: ${ROOMS.length} rooms, ${TOURS.length} journeys, ` +
       `${DEPARTURES.length} departures (${firstDeparture} .. ${lastDeparture}), ` +
-      `${ROOMS.length} weekend price rules.`,
+      `${ROOMS.length} weekend price rules, ` +
+      `${ROOMS.length * IMAGES_PER_ROOM} room images, ${TOURS.length * IMAGES_PER_TOUR} tour images.`,
   );
 }
 

@@ -1,4 +1,10 @@
-import { BookingStatus, PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '@app/database';
+import {
+  BookingStatus,
+  PRISMA_SERVICE,
+  Room,
+  RoomImage,
+  type ExtendedPrismaClient,
+} from '@app/database';
 import { Inject, Injectable } from '@nestjs/common';
 import type { RoomAvailabilityState, RoomOffer } from '../../domain/models/availability';
 import { DateRange, TURNOVER_MS, occupancyWindow } from '../../domain/models/date-range';
@@ -24,6 +30,9 @@ export const overlapping = (range: DateRange) => ({
   checkOut: { gt: new Date(range.from.getTime() - TURNOVER_MS) },
 });
 
+/** Every room read includes its images, ordered for display. */
+const IMAGES_INCLUDE = { images: { orderBy: { position: 'asc' as const } } };
+
 @Injectable()
 export class PrismaRoomRepository extends RoomRepository {
   constructor(@Inject(PRISMA_SERVICE) private readonly prisma: ExtendedPrismaClient) {
@@ -32,17 +41,25 @@ export class PrismaRoomRepository extends RoomRepository {
 
   async create(data: CreateRoomData): Promise<Room> {
     const room = await this.prisma.room.create({ data });
-    return new Room(room);
+    // A brand-new room has no images yet; skip the include rather than pay
+    // for a query that can only return an empty array.
+    return new Room({ ...room, images: [] });
   }
 
   async findById(id: number): Promise<Room | null> {
-    const room = await this.prisma.room.findUnique({ where: { id } });
-    return room ? new Room(room) : null;
+    const room = await this.prisma.room.findUnique({
+      where: { id },
+      include: IMAGES_INCLUDE,
+    });
+    return room ? this.toEntity(room) : null;
   }
 
   async findByCode(code: string): Promise<Room | null> {
-    const room = await this.prisma.room.findUnique({ where: { code } });
-    return room ? new Room(room) : null;
+    const room = await this.prisma.room.findUnique({
+      where: { code },
+      include: IMAGES_INCLUDE,
+    });
+    return room ? this.toEntity(room) : null;
   }
 
   async findMany(filter: RoomListFilter): Promise<Room[]> {
@@ -51,11 +68,28 @@ export class PrismaRoomRepository extends RoomRepository {
         isActive: filter.isActive,
         maxGuests: filter.guests ? { gte: filter.guests } : undefined,
       },
+      include: IMAGES_INCLUDE,
       orderBy: [{ basePrice: 'asc' }, { name: 'asc' }],
       skip: filter.skip,
       take: filter.take,
     });
-    return rooms.map((room) => new Room(room));
+    return rooms.map((room) => this.toEntity(room));
+  }
+
+  private toEntity(room: {
+    images: Array<{
+      id: number;
+      roomId: number;
+      url: string;
+      position: number;
+      caption: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }>;
+    [key: string]: unknown;
+  }): Room {
+    const { images, ...rest } = room;
+    return new Room({ ...rest, images: images.map((image) => new RoomImage(image)) });
   }
 
   /**
@@ -82,6 +116,7 @@ export class PrismaRoomRepository extends RoomRepository {
         maxGuests: filter.guests ? { gte: filter.guests } : undefined,
       },
       include: {
+        ...IMAGES_INCLUDE,
         bookings: {
           where: { status: { in: [...SLOT_HOLDING_STATUSES] }, ...overlaps },
           select: { status: true, holdExpiresAt: true, checkOut: true },
@@ -100,7 +135,7 @@ export class PrismaRoomRepository extends RoomRepository {
       // cannot free up before the last sold stay ends.
       if (sold.length > 0) {
         return {
-          room: new Room(room),
+          room: this.toEntity(room),
           held: false,
           heldUntil: null,
           availableFrom: readyFrom([...sold, ...holds]),
@@ -108,7 +143,7 @@ export class PrismaRoomRepository extends RoomRepository {
       }
 
       return {
-        room: new Room(room),
+        room: this.toEntity(room),
         held: holds.length > 0,
         heldUntil: latestHoldExpiry(holds),
         availableFrom: null,

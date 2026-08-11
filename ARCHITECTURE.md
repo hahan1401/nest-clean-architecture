@@ -313,8 +313,8 @@ Exports:
 - `ExtendedPrismaClient`, `ExtendedTransactionClient` types.
 - `DatabaseModule` — `@Global()`, connects on boot and `$disconnect()`s on shutdown.
 - Entities as plain classes with `constructor(partial)`: `User`, `UserWithDistance`,
-  `Room`, `Tour`, `TourDeparture`, `AvailableDeparture`, `PriceRule`, `Booking`,
-  `BookingLine`, `PriceQuote`, `PriceQuoteLine`, plus the Prisma enums
+  `Room`, `RoomImage`, `Tour`, `TourImage`, `TourDeparture`, `AvailableDeparture`, `PriceRule`,
+  `Booking`, `BookingLine`, `PriceQuote`, `PriceQuoteLine`, plus the Prisma enums
   (`BookingStatus`, `BookableType`, `DepartureStatus`, `PriceSource`) re-exported so no
   app imports `@prisma/client` directly.
 
@@ -658,6 +658,9 @@ Catalogue and availability:
 | `GET` | `/rooms/:id` | `get_room` |
 | `GET` | `/rooms/:id/availability?from&to` | `check_room_availability` |
 | `GET` | `/rooms/:id/bookings?status&from&to` | `list_room_bookings` |
+| `POST` | `/rooms/:id/images` | `add_room_image` |
+| `PATCH` | `/rooms/:id/images/reorder` | `reorder_room_images` |
+| `DELETE` | `/rooms/:id/images/:imageId` | `remove_room_image` |
 | `POST` / `GET` | `/tours` | `create_tour` / `list_tours` |
 | `GET` | `/tours/availability?from&to&seats` | `search_available_departures` |
 | `GET` | `/tours/slug/:slug` | `get_tour_by_slug` |
@@ -665,6 +668,9 @@ Catalogue and availability:
 | `POST` / `GET` | `/tours/:id/departures` | `create_tour_departure` / `list_tour_departures` |
 | `GET` | `/tours/:id/availability?from&to&seats` | `check_tour_availability` |
 | `GET` | `/tours/:id/bookings` | `list_tour_bookings` |
+| `POST` | `/tours/:id/images` | `add_tour_image` |
+| `PATCH` | `/tours/:id/images/reorder` | `reorder_tour_images` |
+| `DELETE` | `/tours/:id/images/:imageId` | `remove_tour_image` |
 | `POST` / `GET` | `/price-rules` | `create_price_rule` / `list_price_rules` |
 | `DELETE` | `/price-rules/:id` | `delete_price_rule` |
 

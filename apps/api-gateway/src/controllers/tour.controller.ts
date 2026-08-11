@@ -1,4 +1,5 @@
 import {
+  AddImageDto,
   AvailableDepartureResponseDto,
   BOOKING_PATTERNS,
   BOOKING_SERVICE,
@@ -7,8 +8,10 @@ import {
   CreateTourDepartureDto,
   CreateTourDto,
   DepartureListQueryDto,
+  ReorderImagesDto,
   TourAvailabilityQueryDto,
   TourDepartureResponseDto,
+  TourImageResponseDto,
   TourListQueryDto,
   TourResponseDto,
 } from '@app/common';
@@ -16,12 +19,14 @@ import type { CorrelatedRequest } from '@app/common';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -141,6 +146,53 @@ export class TourController {
       this.bookingClient.send<BookingResponseDto[]>(BOOKING_PATTERNS.LIST_TOUR_BOOKINGS, {
         tourId: id,
         ...query,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Post(':id/images')
+  @HttpCode(HttpStatus.CREATED)
+  addImage(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddImageDto,
+  ) {
+    return lastValueFrom(
+      this.bookingClient.send<TourImageResponseDto>(BOOKING_PATTERNS.ADD_TOUR_IMAGE, {
+        tourId: id,
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Patch(':id/images/reorder')
+  reorderImages(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReorderImagesDto,
+  ) {
+    return lastValueFrom(
+      this.bookingClient.send<TourImageResponseDto[]>(BOOKING_PATTERNS.REORDER_TOUR_IMAGES, {
+        tourId: id,
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Delete(':id/images/:imageId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeImage(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('imageId', ParseIntPipe) imageId: number,
+  ): Promise<void> {
+    await lastValueFrom(
+      this.bookingClient.send<{ deleted: boolean }>(BOOKING_PATTERNS.REMOVE_TOUR_IMAGE, {
+        tourId: id,
+        imageId,
         requestId: req.requestId,
       }),
     );

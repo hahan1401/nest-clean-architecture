@@ -10,8 +10,10 @@ import {
   PriceRule,
   PriceSource,
   Room,
+  RoomImage,
   Tour,
   TourDeparture,
+  TourImage,
 } from '@app/database';
 
 /**
@@ -23,6 +25,35 @@ import {
 const toIso = (value: Date | null | undefined): string | null =>
   value ? value.toISOString() : null;
 
+/** One symbolic picture. Only the external store URL is ever returned, never bytes. */
+export class RoomImageResponseDto {
+  id: number;
+  url: string;
+  position: number;
+  caption: string | null;
+
+  constructor(image: RoomImage) {
+    this.id = image.id;
+    this.url = image.url;
+    this.position = image.position;
+    this.caption = image.caption ?? null;
+  }
+}
+
+export class TourImageResponseDto {
+  id: number;
+  url: string;
+  position: number;
+  caption: string | null;
+
+  constructor(image: TourImage) {
+    this.id = image.id;
+    this.url = image.url;
+    this.position = image.position;
+    this.caption = image.caption ?? null;
+  }
+}
+
 export class RoomResponseDto {
   id: number;
   code: string;
@@ -31,6 +62,8 @@ export class RoomResponseDto {
   maxGuests: number;
   basePrice: number;
   isActive: boolean;
+  /** Ascending by position. Empty, never omitted, when the room has none. */
+  images: RoomImageResponseDto[];
 
   constructor(room: Room) {
     this.id = room.id;
@@ -40,6 +73,7 @@ export class RoomResponseDto {
     this.maxGuests = room.maxGuests;
     this.basePrice = room.basePrice;
     this.isActive = room.isActive;
+    this.images = (room.images ?? []).map((image) => new RoomImageResponseDto(image));
   }
 }
 
@@ -115,6 +149,8 @@ export class TourResponseDto {
   durationDays: number;
   basePricePerPerson: number;
   isActive: boolean;
+  /** Ascending by position. Empty, never omitted, when the tour has none. */
+  images: TourImageResponseDto[];
 
   constructor(tour: Tour) {
     this.id = tour.id;
@@ -124,6 +160,7 @@ export class TourResponseDto {
     this.durationDays = tour.durationDays;
     this.basePricePerPerson = tour.basePricePerPerson;
     this.isActive = tour.isActive;
+    this.images = (tour.images ?? []).map((image) => new TourImageResponseDto(image));
   }
 }
 

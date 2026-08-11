@@ -111,9 +111,33 @@ model Room {
 
   bookings   Booking[]
   priceRules PriceRule[]
+  images     RoomImage[]
 
   @@index([isActive, maxGuests])
   @@map("rooms")
+}
+
+/// One of a Room's symbolic pictures, in caller-controlled display order. The
+/// backend never touches image bytes - `url` points at the external object
+/// store (S3/Cloudinary/etc) and only the URL string is persisted here.
+model RoomImage {
+  id     Int    @id @default(autoincrement())
+  roomId Int    @map("room_id")
+  url    String
+  /// Zero-based display order among a room's images; the API renders images
+  /// ascending by this column. Managed by the reorder endpoint, not implied by
+  /// insertion order - `add` appends after the current max unless a caller-
+  /// supplied position says otherwise.
+  position Int
+  /// Optional accessibility/caption text shown alongside the image.
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, position])
+  @@map("room_images")
 }
 
 model Tour {
@@ -130,9 +154,32 @@ model Tour {
 
   departures TourDeparture[]
   priceRules PriceRule[]
+  images     TourImage[]
 
   @@index([isActive])
   @@map("tours")
+}
+
+/// Same shape and role as RoomImage, for Tour. Kept as its own table rather
+/// than folded into the PriceRule/Booking-style dual-nullable-FK +
+/// BookableType pattern: that pattern exists for a mutually-exclusive
+/// "belongs to a Room *or* a Tour" reference, whereas this is a plain
+/// one-to-many from a single owner, so a dedicated FK per model is simpler and
+/// lets Postgres enforce the cascade directly.
+model TourImage {
+  id     Int    @id @default(autoincrement())
+  tourId Int    @map("tour_id")
+  url    String
+  /// Zero-based display order among a tour's images; see RoomImage.position.
+  position  Int
+  caption   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tour Tour @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@index([tourId, position])
+  @@map("tour_images")
 }
 
 /// A dated, seat-capped instance of a Tour. Many bookings share one departure.

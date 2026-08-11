@@ -14,8 +14,26 @@ export class Room {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** Ordered ascending by `position`. Undefined where a query never loaded them. */
+  images?: RoomImage[];
 
   constructor(partial: Partial<Room>) {
+    Object.assign(this, partial);
+  }
+}
+
+/** One of a Room's symbolic pictures. Only the external store URL is persisted. */
+export class RoomImage {
+  id: number;
+  roomId: number;
+  url: string;
+  /** Zero-based display order among a room's images. */
+  position: number;
+  caption?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+
+  constructor(partial: Partial<RoomImage>) {
     Object.assign(this, partial);
   }
 }
@@ -31,8 +49,26 @@ export class Tour {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** Ordered ascending by `position`. Undefined where a query never loaded them. */
+  images?: TourImage[];
 
   constructor(partial: Partial<Tour>) {
+    Object.assign(this, partial);
+  }
+}
+
+/** Same shape and role as RoomImage, for Tour. */
+export class TourImage {
+  id: number;
+  tourId: number;
+  url: string;
+  /** Zero-based display order among a tour's images. */
+  position: number;
+  caption?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+
+  constructor(partial: Partial<TourImage>) {
     Object.assign(this, partial);
   }
 }

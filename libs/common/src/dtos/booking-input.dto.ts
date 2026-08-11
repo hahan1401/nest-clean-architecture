@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsEmail,
   IsIn,
@@ -8,6 +10,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -84,6 +87,44 @@ export class CreateTourDepartureDto {
   @IsInt()
   @Min(0)
   priceOverride?: number;
+}
+
+/**
+ * Adds one image to a Room or a Tour. The backend never stores or proxies
+ * image bytes - `url` must already point at the external object store
+ * (S3, Cloudinary, ...). Shared between rooms and tours since the shape is
+ * identical; which owner it attaches to comes from the route, not the body.
+ */
+export class AddImageDto {
+  @IsUrl({}, { message: 'url must be a valid absolute URL' })
+  @MaxLength(2000)
+  url: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  caption?: string;
+
+  /** Appended after the current highest position when omitted. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+}
+
+/**
+ * The full, new display order for an owner's images: every current image id,
+ * each exactly once. The service rejects a partial or foreign list rather
+ * than guessing what to do with it.
+ */
+export class ReorderImagesDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  imageIds: number[];
 }
 
 export class CreatePriceRuleDto {

@@ -1,15 +1,23 @@
 import {
+  AddImageDto,
   AvailableDepartureResponseDto,
   BOOKING_PATTERNS,
   BookingResponseDto,
   CreateTourDepartureDto,
   CreateTourDto,
+  ReorderImagesDto,
   TourDepartureResponseDto,
+  TourImageResponseDto,
   TourResponseDto,
 } from '@app/common';
 import { BookingStatus } from '@app/database';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import {
+  AddTourImageService,
+  RemoveTourImageService,
+  ReorderTourImagesService,
+} from '../../application/usecases/tour-image.service';
 import {
   CheckTourAvailabilityService,
   CreateTourDepartureService,
@@ -35,6 +43,9 @@ export class TourController {
     private readonly searchAvailableDeparturesService: SearchAvailableDeparturesService,
     private readonly checkTourAvailabilityService: CheckTourAvailabilityService,
     private readonly listTourBookingsService: ListTourBookingsService,
+    private readonly addTourImageService: AddTourImageService,
+    private readonly removeTourImageService: RemoveTourImageService,
+    private readonly reorderTourImagesService: ReorderTourImagesService,
   ) {}
 
   @MessagePattern(BOOKING_PATTERNS.CREATE_TOUR)
@@ -137,5 +148,35 @@ export class TourController {
       },
     });
     return bookings.map((booking) => new BookingResponseDto(booking));
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.ADD_TOUR_IMAGE)
+  async addImage(@Payload() data: AddImageDto & { tourId: number }): Promise<TourImageResponseDto> {
+    const image = await this.addTourImageService.execute({
+      tourId: data.tourId,
+      url: data.url,
+      caption: data.caption ?? null,
+      position: data.position,
+    });
+    return new TourImageResponseDto(image);
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.REMOVE_TOUR_IMAGE)
+  async removeImage(
+    @Payload() data: { tourId: number; imageId: number },
+  ): Promise<{ deleted: boolean }> {
+    await this.removeTourImageService.execute({ tourId: data.tourId, imageId: data.imageId });
+    return { deleted: true };
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.REORDER_TOUR_IMAGES)
+  async reorderImages(
+    @Payload() data: ReorderImagesDto & { tourId: number },
+  ): Promise<TourImageResponseDto[]> {
+    const images = await this.reorderTourImagesService.execute({
+      tourId: data.tourId,
+      orderedImageIds: data.imageIds,
+    });
+    return images.map((image) => new TourImageResponseDto(image));
   }
 }

@@ -1,13 +1,21 @@
 import {
+  AddImageDto,
   BOOKING_PATTERNS,
   BookingResponseDto,
   CreateRoomDto,
+  ReorderImagesDto,
   RoomAvailabilityResponseDto,
+  RoomImageResponseDto,
   RoomResponseDto,
 } from '@app/common';
 import { BookingStatus } from '@app/database';
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
+import {
+  AddRoomImageService,
+  RemoveRoomImageService,
+  ReorderRoomImagesService,
+} from '../../application/usecases/room-image.service';
 import {
   CheckRoomAvailabilityService,
   CreateRoomService,
@@ -29,6 +37,9 @@ export class RoomController {
     private readonly searchAvailableRoomsService: SearchAvailableRoomsService,
     private readonly checkRoomAvailabilityService: CheckRoomAvailabilityService,
     private readonly listRoomBookingsService: ListRoomBookingsService,
+    private readonly addRoomImageService: AddRoomImageService,
+    private readonly removeRoomImageService: RemoveRoomImageService,
+    private readonly reorderRoomImagesService: ReorderRoomImagesService,
   ) {}
 
   @MessagePattern(BOOKING_PATTERNS.CREATE_ROOM)
@@ -128,5 +139,35 @@ export class RoomController {
       },
     });
     return bookings.map((booking) => new BookingResponseDto(booking));
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.ADD_ROOM_IMAGE)
+  async addImage(@Payload() data: AddImageDto & { roomId: number }): Promise<RoomImageResponseDto> {
+    const image = await this.addRoomImageService.execute({
+      roomId: data.roomId,
+      url: data.url,
+      caption: data.caption ?? null,
+      position: data.position,
+    });
+    return new RoomImageResponseDto(image);
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.REMOVE_ROOM_IMAGE)
+  async removeImage(
+    @Payload() data: { roomId: number; imageId: number },
+  ): Promise<{ deleted: boolean }> {
+    await this.removeRoomImageService.execute({ roomId: data.roomId, imageId: data.imageId });
+    return { deleted: true };
+  }
+
+  @MessagePattern(BOOKING_PATTERNS.REORDER_ROOM_IMAGES)
+  async reorderImages(
+    @Payload() data: ReorderImagesDto & { roomId: number },
+  ): Promise<RoomImageResponseDto[]> {
+    const images = await this.reorderRoomImagesService.execute({
+      roomId: data.roomId,
+      orderedImageIds: data.imageIds,
+    });
+    return images.map((image) => new RoomImageResponseDto(image));
   }
 }

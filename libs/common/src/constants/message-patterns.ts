@@ -62,6 +62,11 @@ export const BOOKING_PATTERNS = {
   CHECK_ROOM_AVAILABILITY: 'check_room_availability',
   LIST_ROOM_BOOKINGS: 'list_room_bookings',
 
+  // Room images
+  ADD_ROOM_IMAGE: 'add_room_image',
+  REMOVE_ROOM_IMAGE: 'remove_room_image',
+  REORDER_ROOM_IMAGES: 'reorder_room_images',
+
   // Tours and departures
   CREATE_TOUR: 'create_tour',
   LIST_TOURS: 'list_tours',
@@ -72,6 +77,11 @@ export const BOOKING_PATTERNS = {
   SEARCH_AVAILABLE_DEPARTURES: 'search_available_departures',
   CHECK_TOUR_AVAILABILITY: 'check_tour_availability',
   LIST_TOUR_BOOKINGS: 'list_tour_bookings',
+
+  // Tour images
+  ADD_TOUR_IMAGE: 'add_tour_image',
+  REMOVE_TOUR_IMAGE: 'remove_tour_image',
+  REORDER_TOUR_IMAGES: 'reorder_tour_images',
 
   // Pricing
   CREATE_PRICE_RULE: 'create_price_rule',

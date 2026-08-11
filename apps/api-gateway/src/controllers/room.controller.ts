@@ -1,11 +1,14 @@
 import {
+  AddImageDto,
   BOOKING_PATTERNS,
   BOOKING_SERVICE,
   BookingHistoryQueryDto,
   BookingResponseDto,
   CreateRoomDto,
+  ReorderImagesDto,
   RoomAvailabilityResponseDto,
   RoomAvailabilityQueryDto,
+  RoomImageResponseDto,
   RoomListQueryDto,
   RoomResponseDto,
 } from '@app/common';
@@ -13,12 +16,14 @@ import type { CorrelatedRequest } from '@app/common';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Inject,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -114,6 +119,53 @@ export class RoomController {
       this.bookingClient.send<BookingResponseDto[]>(BOOKING_PATTERNS.LIST_ROOM_BOOKINGS, {
         roomId: id,
         ...query,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Post(':id/images')
+  @HttpCode(HttpStatus.CREATED)
+  addImage(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AddImageDto,
+  ) {
+    return lastValueFrom(
+      this.bookingClient.send<RoomImageResponseDto>(BOOKING_PATTERNS.ADD_ROOM_IMAGE, {
+        roomId: id,
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Patch(':id/images/reorder')
+  reorderImages(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReorderImagesDto,
+  ) {
+    return lastValueFrom(
+      this.bookingClient.send<RoomImageResponseDto[]>(BOOKING_PATTERNS.REORDER_ROOM_IMAGES, {
+        roomId: id,
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
+  }
+
+  @Delete(':id/images/:imageId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeImage(
+    @Req() req: CorrelatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Param('imageId', ParseIntPipe) imageId: number,
+  ): Promise<void> {
+    await lastValueFrom(
+      this.bookingClient.send<{ deleted: boolean }>(BOOKING_PATTERNS.REMOVE_ROOM_IMAGE, {
+        roomId: id,
+        imageId,
         requestId: req.requestId,
       }),
     );
