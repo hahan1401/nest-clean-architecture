@@ -47,7 +47,7 @@ future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
 | **Availability** | Every room the guest count fits, whatever its state for those dates — free, `ON_HOLD` while another guest is mid-checkout, or `BOOKED` with the moment it frees up. Free and held rooms carry a price quote. The house never looks smaller than it is. |
 | **Pricing** | `PriceRule` overrides per room or tour, by date window and/or weekday, resolved by a pure function and then **frozen** into `booking_lines`. Later price edits never rewrite history. |
 | **Holds** | `POST /api/bookings` genuinely reserves the slot for 3 minutes and returns `holdExpiresAt`. A delayed RabbitMQ message, published when the hold starts and timed to the second, releases it. |
-| **Stays** | Booked by calendar date, held from 13:00 to 11:00 house time. A `tsrange` exclusion constraint enforces it, so one guest can leave and the next arrive on the same day — which a date-only range called an overlap. |
+| **Stays** | Booked as instants — the guest picks the hour as well as the day, defaulting to 13:00 arrival and 11:00 departure house time. A `tstzrange` exclusion constraint enforces it, so one guest can leave and the next arrive on the same day — which a date-only range called an overlap. |
 | **Confirmation** | `PENDING → CONFIRMED` commits before the broker is touched, then fires two emails through RabbitMQ → AWS SES. |
 | **Cancellation** | Staff-side by id, or customer-side through a 32-byte token that travels only inside the customer's email and never appears in an API response. |
 | **Chatbot** | SSE streaming answers, grounded in documents chunked and embedded into pgvector. |
@@ -57,7 +57,7 @@ future to sell. It is keyed on the natural keys (`Room.code`, `Tour.slug`,
 ### Two guarantees that do not depend on application code
 
 - A room cannot be double-booked: a Postgres `EXCLUDE USING gist` constraint over
-  `room_id` + `daterange(check_in, check_out, '[)')`, restricted to slot-holding statuses.
+  `room_id` + `tstzrange(check_in, check_out, '[)')`, restricted to slot-holding statuses.
   Half-open ranges make same-day turnover legal.
 - A departure cannot be oversold: a conditional `UPDATE` on `booked_seats` backed by a
   `CHECK`, correct at READ COMMITTED with no `FOR UPDATE` and no retry loop.
@@ -69,9 +69,12 @@ slot — clients must refresh availability rather than retry.
 
 - **Money is a whole number of VND** in `Int` columns. `250000` means ₫250,000. No minor
   unit, no scaling factor.
-- **Calendar dates are `@db.Date` and materialise as UTC midnight.** Build them from
-  date-only ISO strings and read the weekday with `getUTCDay()`. `new Date(2027, 1, 14)`
-  is local time and shifts the night by one.
+- **Every date is an instant.** Every temporal column is `timestamptz(3)`; every date on
+  the wire is a full ISO 8601 instant with a zone, in *and* out, and a bare `"2027-02-14"`
+  is a 400. Where a *day* still matters — counting nights, matching a rule's `daysOfWeek`,
+  deciding what is in the past — it is the **house** day (Asia/Ho_Chi_Minh, UTC+7, no DST),
+  and `apps/api-booking/src/domain/models/house-clock.ts` is the only place that conversion
+  lives. Reading a weekday with `getUTCDay()` is wrong from 17:00Z onwards.
 
 ---
 

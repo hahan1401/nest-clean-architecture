@@ -3,7 +3,7 @@ import { Booking, DepartureStatus } from '@app/database';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PinoLogger } from 'nestjs-pino';
-import { todayUtc } from '../../domain/models/date-range';
+import { nowHouseDayStart } from '../../domain/models/house-clock';
 import { PricingPort } from '../../domain/ports/pricing.port';
 import {
   BookingRepository,
@@ -19,7 +19,7 @@ import {
 } from '../../domain/services/booking-reference';
 import { BookingHoldSchedulerPort } from '../../domain/ports/booking-hold-scheduler.port';
 import { CreateBookingInput, CreateBookingUseCase } from '../../domain/usecases/booking.usecase';
-import { assertUsableRange } from './room.service';
+import { assertStayRange } from './room.service';
 
 /** Exported so the spec asserts the wiring rather than pinning a tuned number. */
 export const DEFAULT_HOLD_TTL_MINUTES = 1;
@@ -89,8 +89,8 @@ export class CreateBookingService implements CreateBookingUseCase {
   private async createRoomBooking(
     input: Extract<CreateBookingInput, { type: 'ROOM' }>,
   ): Promise<Booking> {
-    assertUsableRange(input.range);
-    if (input.range.from < todayUtc()) {
+    assertStayRange(input.range);
+    if (input.range.from < nowHouseDayStart()) {
       throw new ValidationError('checkIn cannot be in the past');
     }
 
@@ -144,7 +144,7 @@ export class CreateBookingService implements CreateBookingUseCase {
     if (departure.status !== DepartureStatus.OPEN) {
       throw new ConflictError('That departure is no longer open for booking');
     }
-    if (departure.departureDate < todayUtc()) {
+    if (departure.departureDate < nowHouseDayStart()) {
       throw new ConflictError('That departure has already left');
     }
 

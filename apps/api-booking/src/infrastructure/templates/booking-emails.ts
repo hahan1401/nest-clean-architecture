@@ -1,3 +1,4 @@
+import { HOUSE_ZONE_LABEL, houseMoment } from '../../domain/models/house-clock';
 import type {
   BookingCancelledNotification,
   BookingConfirmedNotification,
@@ -25,7 +26,27 @@ const HTML_ESCAPES: Record<string, string> = {
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char);
 
-const formatDate = (value: Date): string => value.toISOString().slice(0, 10);
+/**
+ * Every time in these emails is the house's own clock, and says so.
+ *
+ * Both recipients are on Vietnam time - the owner reads this in Da Lat, and the
+ * guest is arriving into it - so a UTC instant was wrong for both of them, and
+ * an *unlabelled* time is worse than a wrong one: it reads as correct. The
+ * label rides along on every moment so a line still means something after being
+ * quoted, forwarded or pasted into a message on its own.
+ *
+ * `houseMoment` is fixed-offset arithmetic, not server-local formatting, so
+ * these strings do not change when the service is deployed in another region.
+ */
+const formatMoment = (value: Date): string => `${houseMoment(value)} (${HOUSE_ZONE_LABEL})`;
+
+/**
+ * The footnote every body ends with. Belt and braces alongside the per-line
+ * label: this is the one place the zone is spelled out rather than abbreviated.
+ */
+const TIME_ZONE_NOTE = `All times shown are Vietnam time (Asia/Ho_Chi_Minh, ${HOUSE_ZONE_LABEL}).`;
+
+const timeZoneNoteHtml = `<p style="font-size:12px;color:#666">${TIME_ZONE_NOTE}</p>`;
 
 /** VND has no minor unit, so it formats as a plain grouped integer. */
 const formatAmount = (amount: number, currency: string): string =>
@@ -33,8 +54,18 @@ const formatAmount = (amount: number, currency: string): string =>
 
 const describeBooking = (n: BookingSubject): string =>
   n.type === 'ROOM'
-    ? `${n.roomName}: ${formatDate(n.checkIn)} to ${formatDate(n.checkOut)} (${n.nights} night(s), ${n.guests} guest(s))`
-    : `${n.tourName}: departing ${formatDate(n.departureDate)} (${n.seats} seat(s))`;
+    ? `${n.roomName}: ${formatMoment(n.checkIn)} to ${formatMoment(n.checkOut)} (${n.nights} night(s), ${n.guests} guest(s))`
+    : `${n.tourName}: departing ${formatMoment(n.departureDate)} (${n.seats} seat(s))`;
+
+/**
+ * The subject line carries the same moments without the zone suffix - repeating
+ * "(GMT+7)" twice in an inbox row is noise, and the body it opens onto is fully
+ * labelled.
+ */
+const describeBookingBriefly = (n: BookingSubject): string =>
+  n.type === 'ROOM'
+    ? `${n.roomName}: ${houseMoment(n.checkIn)} to ${houseMoment(n.checkOut)} (${n.nights} night(s), ${n.guests} guest(s))`
+    : `${n.tourName}: departing ${houseMoment(n.departureDate)} (${n.seats} seat(s))`;
 
 const rowsHtml = (rows: Array<[string, string]>): string =>
   [
@@ -72,16 +103,16 @@ export const ownerBookingConfirmedEmail = (
     ['Email', n.customerEmail],
     ['Phone', n.customerPhone],
     ['Total', formatAmount(n.totalAmount, n.currency)],
-    ['Confirmed at', n.confirmedAt.toISOString()],
+    ['Confirmed at', formatMoment(n.confirmedAt)],
     // Last, and only when the guest wrote something: it is the one row the owner
     // may have to act on before arrival.
     ...optionalRow('Notes', n.notes),
   ];
 
   return {
-    subject: `New confirmed booking ${n.reference} - ${describeBooking(n)}`,
-    text: ['A booking has just been confirmed.', '', rowsText(rows)].join('\n'),
-    html: ['<h2>New confirmed booking</h2>', rowsHtml(rows)].join(''),
+    subject: `New confirmed booking ${n.reference} - ${describeBookingBriefly(n)}`,
+    text: ['A booking has just been confirmed.', '', rowsText(rows), '', TIME_ZONE_NOTE].join('\n'),
+    html: ['<h2>New confirmed booking</h2>', rowsHtml(rows), timeZoneNoteHtml].join(''),
   };
 };
 
@@ -105,6 +136,8 @@ export const customerBookingConfirmedEmail = (
     rowsText(rows),
     '',
     `Need to cancel? ${n.cancelUrl}`,
+    '',
+    TIME_ZONE_NOTE,
   ].join('\n');
 
   const html = [
@@ -113,6 +146,7 @@ export const customerBookingConfirmedEmail = (
     rowsHtml(rows),
     `<p><a href="${escapeHtml(n.cancelUrl)}">Cancel this booking</a></p>`,
     `<p style="font-size:12px;color:#666">Or paste this link into your browser: ${escapeHtml(n.cancelUrl)}</p>`,
+    timeZoneNoteHtml,
   ].join('');
 
   return {
@@ -140,15 +174,21 @@ export const ownerBookingCancelledEmail = (
     ['Email', n.customerEmail],
     ['Phone', n.customerPhone],
     ['Total', formatAmount(n.totalAmount, n.currency)],
-    ['Cancelled at', n.cancelledAt.toISOString()],
+    ['Cancelled at', formatMoment(n.cancelledAt)],
     ['Cancelled by', n.cancelledBy === 'customer' ? 'Guest (cancellation link)' : 'Owner'],
     ...optionalRow('Reason', n.reason),
   ];
 
   return {
-    subject: `Booking cancelled ${n.reference} - ${describeBooking(n)}`,
-    text: [`${describeActor(n)}. The slot is available again.`, '', rowsText(rows)].join('\n'),
-    html: ['<h2>Booking cancelled</h2>', rowsHtml(rows)].join(''),
+    subject: `Booking cancelled ${n.reference} - ${describeBookingBriefly(n)}`,
+    text: [
+      `${describeActor(n)}. The slot is available again.`,
+      '',
+      rowsText(rows),
+      '',
+      TIME_ZONE_NOTE,
+    ].join('\n'),
+    html: ['<h2>Booking cancelled</h2>', rowsHtml(rows), timeZoneNoteHtml].join(''),
   };
 };
 
@@ -162,7 +202,7 @@ export const customerBookingCancelledEmail = (
   const rows: Array<[string, string]> = [
     ['Reference', n.reference],
     ['Booking', describeBooking(n)],
-    ['Cancelled at', n.cancelledAt.toISOString()],
+    ['Cancelled at', formatMoment(n.cancelledAt)],
     // Matters most when the owner cancelled: the guest is owed an explanation.
     ...optionalRow('Reason', n.reason),
   ];
@@ -175,6 +215,8 @@ export const customerBookingCancelledEmail = (
     rowsText(rows),
     '',
     'If this was not you, reply to this email and we will look into it.',
+    '',
+    TIME_ZONE_NOTE,
   ].join('\n');
 
   const html = [
@@ -182,6 +224,7 @@ export const customerBookingCancelledEmail = (
     `<p>Hi ${escapeHtml(n.customerName)}, your booking has been cancelled. Nothing further is needed from you.</p>`,
     rowsHtml(rows),
     '<p style="font-size:12px;color:#666">If this was not you, reply to this email and we will look into it.</p>',
+    timeZoneNoteHtml,
   ].join('');
 
   return {

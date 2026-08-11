@@ -502,30 +502,36 @@ and the delay is exact. Raise that value and messages already queued keep the ol
 wait ahead of newer ones, which delays those releases. If holds ever need per-booking
 durations, install the delayed-message plugin instead of stretching this.
 
-### Stays are instants, not calendar days
+### Everything temporal is an instant
 
-A guest picks calendar dates. The room is held from **13:00 on the arrival day to 11:00 on
-the departure day**, house time — Asia/Ho_Chi_Minh, UTC+7 year round with no daylight
-saving, which is why `stay-window.ts` does fixed-offset arithmetic instead of pulling in a
-timezone library. `check_in` / `check_out` are `timestamp` columns holding those instants.
+There are no calendar-date columns in this schema and no date-only fields on the wire.
+Every temporal column is `timestamptz`, every date crosses the API as a full ISO 8601
+instant in *and* out, and a bare `"2027-02-14"` is a 400.
 
-The point is the turnover. Under date-only storage a stay ending on the 16th and one
-starting on the 16th shared that day, `daterange('[)')` called it an overlap, and the
-exclusion constraint refused the second booking — so a room could never be re-sold on its
-own checkout day. With hours, `tsrange(check_in, check_out, '[)')` sees `…T04:00Z` and
-`…T06:00Z` as disjoint and the booking goes through, while any stay sharing a real night
-still collides.
+A guest picks the hour as well as the day. The site **defaults** to a 13:00 arrival and an
+11:00 departure but does not impose them: `check_in` / `check_out` hold exactly what was
+picked, to the half-hour.
 
-Three rules keep this from leaking everywhere:
+The point of holding the hours is the turnover. Under date-only storage a stay ending on
+the 16th and one starting on the 16th shared that day, `daterange('[)')` called it an
+overlap, and the exclusion constraint refused the second booking — so a room could never be
+re-sold on its own checkout day. With hours, `tstzrange(check_in, check_out, '[)')` sees
+`…T04:00Z` and `…T06:00Z` as disjoint and the booking goes through, while any stay sharing a
+real night still collides.
 
-1. **`toStayWindow` is the only place the house times are applied**, and only at the storage
-   boundary — the two repositories that compare against `check_in` / `check_out`.
-2. **Money never sees an hour.** Quotes, price rules and `booking_lines` still work in
-   calendar dates, because a night is still a calendar night: 13 Feb 13:00 → 15 Feb 11:00 is
-   two nights, priced as the 13th and the 14th.
-3. **The API takes dates and returns instants.** `POST /bookings` accepts `"2027-02-14"`;
-   the booking reads back as `"2027-02-14T06:00:00.000Z"`. Clients must render these with a
-   timezone rather than slicing the first ten characters.
+Three rules keep the hours from leaking everywhere:
+
+1. **`house-clock.ts` is the only place the house clock lives.** Asia/Ho_Chi_Minh is UTC+7
+   year round with no daylight saving, so a fixed offset is exact rather than a
+   simplification — which is why this is arithmetic and not a timezone library. Everything
+   that turns an instant into "which day is that?" — night counting, price-rule weekdays,
+   "not in the past" — goes through it.
+2. **Money never sees an hour.** Quotes, price rules and `booking_lines` work in *nights*,
+   and a night is a house-local calendar night: 13 Feb 13:00 → 15 Feb 11:00 is two nights,
+   priced as the 13th and the 14th. A stay crossing no night is rejected, not billed at zero.
+3. **The wire shape is symmetric.** `POST /bookings` takes
+   `"2027-02-14T06:00:00.000Z"` and the booking reads back as the same string. Clients
+   render it on the house clock; nobody slices the first ten characters.
 
 ### Email Services (`api-email`, `api-gmail`)
 
@@ -697,9 +703,9 @@ releasing terminals. `PENDING`, `CONFIRMED` and `COMPLETED` all hold a slot.
 Neither guarantee depends on application code being correct:
 
 - **Rooms** use a Postgres `EXCLUDE USING gist` constraint (`bookings_room_no_overlap`,
-  requires the `btree_gist` extension) over `room_id` + `daterange(check_in, check_out, '[)')`,
-  restricted to slot-holding statuses. The half-open range makes same-day turnover legal —
-  a checkout and a check-in on the same date do not collide. Cancelling drops the row out of
+  requires the `btree_gist` extension) over `room_id` + `tstzrange(check_in, check_out, '[)')`,
+  restricted to slot-holding statuses. The half-open range over instants makes same-day
+  turnover legal — a checkout at 11:00 and a check-in at 13:00 do not collide. Cancelling drops the row out of
   the partial index, freeing the dates atomically with no compensating write. A losing insert
   raises `23P01`, which the repository maps to a `ConflictError` (Prisma has no mapped code
   for exclusion violations, so it matches on the constraint name).
@@ -722,10 +728,10 @@ The winner is chosen by a **pure function** in `domain/services/price-calculator
 result is written to `booking_lines` alongside `bookings.total_amount` from the same in-memory
 quote — so the two cannot diverge, and later price edits never rewrite history.
 
-> Calendar dates are `@db.Date` and materialise as **UTC midnight**. Build them from
-> date-only ISO strings (`new Date('2027-02-14')`) and read the weekday with `getUTCDay()`,
-> which matches Postgres `EXTRACT(DOW)`. `new Date(2027, 1, 14)` is local time and shifts the
-> night by one outside UTC.
+> A night is identified by the instant it **begins on the house clock** (`houseDayStart`),
+> and a rule's `daysOfWeek` is read the same way (`houseWeekday`, Postgres `EXTRACT(DOW)`
+> numbering). Reading the weekday with `getUTCDay()` is wrong from 17:00Z onwards, which is
+> already tomorrow on the ridge — it would price the wrong nights.
 
 ### Confirmation emails and the cancel link
 

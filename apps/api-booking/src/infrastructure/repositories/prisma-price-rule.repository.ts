@@ -1,6 +1,7 @@
 import { PRISMA_SERVICE, PriceRule, type ExtendedPrismaClient } from '@app/database';
 import { Inject, Injectable } from '@nestjs/common';
 import { DateRange } from '../../domain/models/date-range';
+import { MS_PER_DAY, houseDayStart } from '../../domain/models/house-clock';
 import {
   CreatePriceRuleData,
   PriceRuleFilter,
@@ -36,13 +37,21 @@ export class PrismaPriceRuleRepository extends PriceRuleRepository {
   }
 
   /**
-   * Candidate rules for a stay: anything whose window intersects [from, to).
-   * A NULL bound means unbounded on that side, so it always intersects.
-   * The final precedence decision is the pure comparator in the domain layer -
-   * this only narrows the set.
+   * Candidate rules for a stay: anything whose window intersects the nights
+   * being priced. A NULL bound means unbounded on that side, so it always
+   * intersects. The final precedence decision is the pure comparator in the
+   * domain layer - this only narrows the set.
+   *
+   * Both bounds are NIGHTS, not the arrival and checkout instants: the domain
+   * matcher compares a rule's window against the instant a night *begins* on the
+   * house clock, so narrowing on the raw instants would drop rules the matcher
+   * would have applied - a rule ending at 07:00 on the arrival day still covers
+   * that night, which began at 00:00. The checkout day is never billed, so the
+   * upper bound is the day before it.
    */
   async findForRoom(roomId: number, range: DateRange): Promise<PriceRule[]> {
-    const lastNight = new Date(range.to.getTime() - 86_400_000);
+    const firstNight = houseDayStart(range.from);
+    const lastNight = new Date(houseDayStart(range.to).getTime() - MS_PER_DAY);
 
     const rules = await this.prisma.priceRule.findMany({
       where: {
@@ -50,7 +59,7 @@ export class PrismaPriceRuleRepository extends PriceRuleRepository {
         isActive: true,
         AND: [
           { OR: [{ startDate: null }, { startDate: { lte: lastNight } }] },
-          { OR: [{ endDate: null }, { endDate: { gte: range.from } }] },
+          { OR: [{ endDate: null }, { endDate: { gte: firstNight } }] },
         ],
       },
     });

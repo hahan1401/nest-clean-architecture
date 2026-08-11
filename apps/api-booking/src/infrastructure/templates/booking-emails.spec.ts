@@ -9,6 +9,16 @@ import {
   ownerBookingConfirmedEmail,
 } from './booking-emails';
 
+/**
+ * Fixtures are instants on the HOUSE clock, because that is what the emails
+ * render: 13:00 in Da Lat is 06:00Z, 11:00 is 04:00Z, and a 07:10 departure is
+ * 00:10Z. Building them any other way tests a time nobody would read.
+ */
+const houseTime = (isoDay: string, hour: number, minute = 0): Date => {
+  const [year, month, day] = isoDay.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour - 7, minute));
+};
+
 const cancelledNotification = (
   overrides: Partial<BookingCancelledNotification> = {},
 ): BookingCancelledNotification =>
@@ -25,8 +35,8 @@ const cancelledNotification = (
     cancelledBy: 'customer',
     type: 'ROOM',
     roomName: 'Garden Room',
-    checkIn: new Date('2027-02-13'),
-    checkOut: new Date('2027-02-16'),
+    checkIn: houseTime('2027-02-13', 13),
+    checkOut: houseTime('2027-02-16', 11),
     nights: 3,
     guests: 2,
     ...overrides,
@@ -49,8 +59,8 @@ const roomNotification = (
     cancelUrl: CANCEL_URL,
     type: 'ROOM',
     roomName: 'Garden Room',
-    checkIn: new Date('2027-02-13'),
-    checkOut: new Date('2027-02-16'),
+    checkIn: houseTime('2027-02-13', 13),
+    checkOut: houseTime('2027-02-16', 11),
     nights: 3,
     guests: 2,
     ...overrides,
@@ -69,7 +79,7 @@ const tourNotification = (): BookingConfirmedNotification => ({
   notes: null,
   type: 'TOUR',
   tourName: 'Tam Dao Sunrise Trek',
-  departureDate: new Date('2027-03-06'),
+  departureDate: houseTime('2027-03-06', 7, 10),
   seats: 3,
 });
 
@@ -84,19 +94,19 @@ describe('ownerBookingConfirmedEmail', () => {
     expect(email.text).toContain('3,900,000 VND');
   });
 
-  it('renders the room dates and night count', () => {
+  it('renders the room moments on the house clock, and the night count', () => {
     const email = ownerBookingConfirmedEmail(roomNotification());
 
-    expect(email.text).toContain('2027-02-13');
-    expect(email.text).toContain('2027-02-16');
+    expect(email.text).toContain('13/02/2027 13:00 (GMT+7)');
+    expect(email.text).toContain('16/02/2027 11:00 (GMT+7)');
     expect(email.text).toContain('3 night(s)');
   });
 
-  it('renders the departure date and seats for a tour', () => {
+  it('renders the departure moment and seats for a tour', () => {
     const email = ownerBookingConfirmedEmail(tourNotification());
 
     expect(email.subject).toContain('Tam Dao Sunrise Trek');
-    expect(email.text).toContain('departing 2027-03-06');
+    expect(email.text).toContain('departing 06/03/2027 07:10 (GMT+7)');
     expect(email.text).toContain('3 seat(s)');
   });
 
@@ -185,6 +195,55 @@ describe('guest notes on the confirmation emails', () => {
 
     expect(email.html).not.toContain('<script>');
     expect(email.html).toContain('&lt;script&gt;');
+  });
+});
+
+/**
+ * The recipients are both on Vietnam time - the owner reads this in Da Lat, the
+ * guest is arriving into it - so a UTC instant was wrong for both, and an
+ * unlabelled one is worse: it reads as correct. These tests are what stops a
+ * `toISOString()` creeping back in.
+ */
+describe('times in the emails', () => {
+  const everyEmail = () => [
+    ownerBookingConfirmedEmail(roomNotification()),
+    customerBookingConfirmedEmail(roomNotification()),
+    ownerBookingCancelledEmail(cancelledNotification()),
+    customerBookingCancelledEmail(cancelledNotification()),
+  ];
+
+  it('renders every moment on the house clock, never as a UTC instant', () => {
+    for (const email of everyEmail()) {
+      expect(email.text).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+      expect(email.html).not.toMatch(/\d{4}-\d{2}-\d{2}T/);
+    }
+  });
+
+  it('labels the zone on every moment, so a quoted line still means something', () => {
+    const email = ownerBookingConfirmedEmail(roomNotification());
+
+    // 10:00Z on 5 Jan is 17:00 on the ridge.
+    expect(email.text).toContain('Confirmed at: 05/01/2027 17:00 (GMT+7)');
+  });
+
+  it('does the same for a cancellation', () => {
+    const email = ownerBookingCancelledEmail(cancelledNotification());
+
+    expect(email.text).toContain('Cancelled at: 06/01/2027 16:00 (GMT+7)');
+  });
+
+  it('ends every body with the footnote naming Vietnam time', () => {
+    for (const email of everyEmail()) {
+      expect(email.text).toContain('All times shown are Vietnam time (Asia/Ho_Chi_Minh, GMT+7)');
+      expect(email.html).toContain('All times shown are Vietnam time (Asia/Ho_Chi_Minh, GMT+7)');
+    }
+  });
+
+  it('keeps the subject compact - the labelled body is one click away', () => {
+    const email = ownerBookingConfirmedEmail(roomNotification());
+
+    expect(email.subject).toContain('13/02/2027 13:00');
+    expect(email.subject).not.toContain('GMT+7');
   });
 });
 

@@ -2,7 +2,6 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
-  IsDateString,
   IsEmail,
   IsIn,
   IsInt,
@@ -14,13 +13,11 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { IsIsoInstant } from './is-iso-instant.decorator';
 
-/**
- * Calendar dates cross the wire as date-only ISO strings ("2027-02-14"), never as
- * full timestamps. The service parses them to UTC midnight, matching how Prisma
- * materialises @db.Date columns.
- */
-const DATE_ONLY = { strict: true } as const;
+// Every date crosses the wire as a full ISO 8601 instant
+// ("2027-02-14T06:00:00.000Z"), never as a calendar date. See `IsIsoInstant`
+// for why the zone is mandatory.
 
 export class CreateRoomDto {
   @IsString()
@@ -76,7 +73,7 @@ export class CreateTourDto {
 }
 
 export class CreateTourDepartureDto {
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   departureDate: string;
 
   @IsInt()
@@ -109,11 +106,11 @@ export class CreatePriceRuleDto {
   tourId?: number;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   startDate?: string;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   endDate?: string;
 
   /** Postgres DOW numbering: 0 = Sunday .. 6 = Saturday. Empty = every day. */
@@ -161,11 +158,11 @@ export class CreateBookingDto {
   roomId?: number;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   checkIn?: string;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   checkOut?: string;
 
   // TOUR fields
@@ -205,11 +202,11 @@ export class QuotePriceDto {
   roomId?: number;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   checkIn?: string;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   checkOut?: string;
 
   @IsOptional()

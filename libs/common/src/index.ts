@@ -7,6 +7,7 @@ export * from './dtos/update-user.dto';
 export * from './dtos/update-location.dto';
 export * from './dtos/notification.dto';
 export * from './dtos/email.dto';
+export * from './dtos/is-iso-instant.decorator';
 export * from './dtos/booking-input.dto';
 export * from './dtos/booking-query.dto';
 export * from './dtos/booking-response.dto';

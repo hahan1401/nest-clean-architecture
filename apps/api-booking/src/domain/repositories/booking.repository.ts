@@ -85,9 +85,9 @@ export abstract class BookingRepository {
    */
   abstract expireHold(bookingId: number, now: Date): Promise<boolean>;
 
-  /** OPEN departures already in the past -> CLOSED. */
-  abstract closeElapsedDepartures(today: Date): Promise<number>;
+  /** OPEN departures that have already left -> CLOSED. */
+  abstract closeElapsedDepartures(now: Date): Promise<number>;
 
   /** CONFIRMED bookings whose stay or departure has elapsed -> COMPLETED. */
-  abstract completeElapsedBookings(today: Date): Promise<number>;
+  abstract completeElapsedBookings(now: Date): Promise<number>;
 }

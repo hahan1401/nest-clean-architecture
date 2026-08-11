@@ -1,18 +1,23 @@
 import { PriceQuote, PriceQuoteLine, PriceRule, PriceSource } from '@app/database';
 import { DateRange, MS_PER_DAY, eachNight } from '../models/date-range';
+import { houseWeekday } from '../models/house-clock';
 
 /**
- * Does this rule apply on this particular day?
+ * Does this rule apply on this particular night?
  *
- * `getUTCDay()` is 0 = Sunday .. 6 = Saturday, identical to Postgres
- * EXTRACT(DOW), which is the numbering PriceRule.daysOfWeek stores. Reading the
- * weekday in local time here would shift the rule by a day west of UTC.
+ * `day` is the instant the night begins on the house clock, and the window
+ * bounds are instants too, so both comparisons are straight instant tests.
+ *
+ * The weekday is read on the HOUSE clock, in Postgres DOW numbering
+ * (0 = Sunday .. 6 = Saturday), which is what PriceRule.daysOfWeek stores. It
+ * has to be: a night beginning at 17:00Z is already the next day on the ridge,
+ * so a "Saturday" rule read in UTC would price the wrong nights.
  */
 const matches = (rule: PriceRule, day: Date): boolean =>
   rule.isActive &&
   (rule.startDate == null || day >= rule.startDate) &&
   (rule.endDate == null || day <= rule.endDate) &&
-  (rule.daysOfWeek.length === 0 || rule.daysOfWeek.includes(day.getUTCDay()));
+  (rule.daysOfWeek.length === 0 || rule.daysOfWeek.includes(houseWeekday(day)));
 
 /** How narrowly a rule is targeted: bounded dates and a weekday filter each count. */
 const specificity = (rule: PriceRule): number =>

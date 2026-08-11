@@ -2,7 +2,7 @@ import { ConflictError, NotFoundError, ValidationError } from '@app/common';
 import { Booking, Room } from '@app/database';
 import { Injectable } from '@nestjs/common';
 import { RoomAvailability } from '../../domain/models/availability';
-import { DateRange } from '../../domain/models/date-range';
+import { DateRange, nightCount } from '../../domain/models/date-range';
 import { PricingPort } from '../../domain/ports/pricing.port';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import {
@@ -23,10 +23,28 @@ import {
   SearchAvailableRoomsUseCase,
 } from '../../domain/usecases/room.usecase';
 
-/** Shared guard: a stay must cover at least one night. */
+/** Shared guard: a window has to point forwards to mean anything. */
 export const assertUsableRange = (range: DateRange): void => {
   if (!(range.to.getTime() > range.from.getTime())) {
     throw new ValidationError('checkOut must be after checkIn');
+  }
+};
+
+/**
+ * A room stay, which must additionally cover at least one night.
+ *
+ * `to > from` alone stopped being enough once the guest picks hours: arriving at
+ * 09:00 and leaving at 20:00 the same day satisfies it and prices at zero,
+ * because a night is a calendar night on the house clock and none has been
+ * crossed. A search *window* is a different thing and only needs the check
+ * above - a departure board may legitimately span a few hours.
+ */
+export const assertStayRange = (range: DateRange): void => {
+  assertUsableRange(range);
+  if (nightCount(range) < 1) {
+    throw new ValidationError(
+      'checkOut must fall on a later day than checkIn - a stay is at least one night',
+    );
   }
 };
 
@@ -90,7 +108,7 @@ export class SearchAvailableRoomsService implements SearchAvailableRoomsUseCase 
   ) {}
 
   async execute(input: SearchAvailableRoomsInput): Promise<RoomAvailability[]> {
-    assertUsableRange(input.range);
+    assertStayRange(input.range);
 
     const offers = await this.roomRepository.findAvailable(input.range, {
       guests: input.guests,
@@ -131,7 +149,7 @@ export class CheckRoomAvailabilityService implements CheckRoomAvailabilityUseCas
   ) {}
 
   async execute(input: CheckRoomAvailabilityInput): Promise<RoomAvailability> {
-    assertUsableRange(input.range);
+    assertStayRange(input.range);
 
     const room = await this.roomRepository.findById(input.roomId);
     if (!room) {

@@ -29,7 +29,7 @@ import {
 } from '../../application/usecases/price-rule.service';
 import { CreateBookingInput } from '../../domain/usecases/booking.usecase';
 import { QuotePriceInput } from '../../domain/usecases/price-rule.usecase';
-import { toDateRange, toOptionalUtcDate } from '../utils/payload-dates';
+import { toDateRange, toOptionalInstant } from '../utils/payload-dates';
 
 @Controller()
 export class BookingController {
@@ -153,8 +153,8 @@ export class BookingController {
       name: data.name,
       roomId: data.roomId ?? null,
       tourId: data.tourId ?? null,
-      startDate: toOptionalUtcDate(data.startDate, 'startDate'),
-      endDate: toOptionalUtcDate(data.endDate, 'endDate'),
+      startDate: toOptionalInstant(data.startDate, 'startDate'),
+      endDate: toOptionalInstant(data.endDate, 'endDate'),
       daysOfWeek: data.daysOfWeek ?? [],
       amount: data.amount,
       priority: data.priority ?? 0,

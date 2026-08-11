@@ -71,46 +71,73 @@ new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(25
 // "250.000 ₫"
 ```
 
-### Two different date shapes
+### Every date is an instant
 
 | Kind | Fields | Format |
 |---|---|---|
-| **Calendar dates** | `departureDate`, `from`, `to`, `startDate`, `endDate`, price-line `date` | Date-only string `"2027-02-14"` — **in and out** |
-| **Timestamps** | `createdAt`, `updatedAt`, `holdExpiresAt`, `confirmedAt`, `cancelledAt`, `completedAt`, `heldUntil`, `availableFrom` | Full ISO 8601 with `Z` |
-| **Stay boundaries** | `checkIn`, `checkOut` | **Date-only going in, ISO timestamp coming back** |
+| **All of them** | `checkIn`, `checkOut`, `departureDate`, `from`, `to`, `startDate`, `endDate`, price-line `date`, `createdAt`, `updatedAt`, `holdExpiresAt`, `confirmedAt`, `cancelledAt`, `completedAt`, `heldUntil`, `availableFrom` | Full ISO 8601 with an explicit zone — **in and out** |
 
-`checkIn` and `checkOut` are the exception worth reading twice. You **book** by calendar
-date — `POST /bookings` still takes `"2027-02-14"` — but a booking **reads back** as the
-instants the room is held: 13:00 on the arrival day to 11:00 on the departure day, house
-time (Asia/Ho_Chi_Minh, UTC+7 year round). So `"2027-02-14"` in becomes
-`"2027-02-14T06:00:00.000Z"` out.
+There is one date shape in this API and it is an instant. A date-only string like
+`"2027-02-14"` is **rejected with a 400**: read as UTC midnight it is 07:00 on the ridge,
+which is nobody's check-in time, and that ambiguity is exactly what this contract removed.
 
-That is what lets the house turn a room over in a day: a stay ending at 11:00 and one
-starting at 13:00 on the same date no longer collide, so the room shows as free for the
-incoming guest. Render these with a time zone — `toISOString().slice(0, 10)` on a check-out
-returns the wrong day west of UTC, and dropping the hour hides the turnover from the guest.
+```jsonc
+// ✅
+{ "checkIn": "2027-02-14T06:00:00.000Z", "checkOut": "2027-02-16T04:00:00.000Z" }
+{ "checkIn": "2027-02-14T13:00:00+07:00" }   // same instant, also fine
 
-Calendar fields are validated with `@IsDateString({ strict: true })`. Sending
-`"2027-02-14T00:00:00.000Z"` where a date-only string is expected is rejected with a 400.
-
-Build them without letting the local timezone shift the day:
-
-```ts
-// ✅ safe — no timezone involved
-const toDateOnly = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-// ❌ in UTC-negative zones this returns yesterday
-const wrong = (d: Date) => d.toISOString().slice(0, 10);
+// ❌ 400 VALIDATION
+{ "checkIn": "2027-02-14" }
+{ "checkIn": "2027-02-14T13:00" }            // no zone — means a different moment to every reader
 ```
 
-Room stays are **half-open ranges** `[checkIn, checkOut)`. A stay of `2027-02-14 → 2027-02-16` is
-two nights, and someone else may check in on the 16th. Nights = `checkOut - checkIn`.
+Seconds and milliseconds are **truncated to zero** server-side. The site offers hours and
+half-hours only; send `:00.000` and nothing surprising can land inside an overlap range.
 
-### Weekdays are Postgres DOW
+#### The house clock
 
-`daysOfWeek` on a price rule uses `0 = Sunday … 6 = Saturday`, which matches JavaScript's
-`Date.prototype.getUTCDay()`. An empty or absent array means "every day".
+The house is on the ridge above Đà Lạt: **Asia/Ho_Chi_Minh, UTC+7 all year, no daylight
+saving.** Every time a guest picks and every time the site renders is on that clock,
+wherever the guest is sitting. So a form showing `14/02/2027 13:00` sends
+`"2027-02-14T06:00:00.000Z"`, and rendering that instant back in `Asia/Ho_Chi_Minh` shows
+`13:00` again.
+
+The site defaults to a 13:00 arrival and an 11:00 departure, but they are **defaults, not
+rules** — the guest may pick any half-hour, and the booking stores what was picked. Those
+default hours are what lets the house turn a room over in a day: a stay ending at 11:00 and
+one starting at 13:00 on the same date do not collide, so the room shows free for the
+incoming guest. Always render a stay with its hour; dropping it hides the turnover.
+
+#### Nights are calendar nights, on the house clock
+
+A stay of `14 Feb 15:00 → 16 Feb 09:00` is **two** nights and bills two, even though it is
+44 hours. Nights are the house-local calendar days crossed, never elapsed time divided by
+24 — otherwise a late arrival would quietly cost an extra night.
+
+```ts
+const HOUSE_OFFSET_MS = 7 * 3_600_000;
+const houseDay = (iso: string) =>
+  Math.floor((Date.parse(iso) + HOUSE_OFFSET_MS) / 86_400_000);
+
+const nights = houseDay(checkOut) - houseDay(checkIn);
+```
+
+A stay must cross at least one night. `14 Feb 09:00 → 14 Feb 20:00` is rejected with a 400,
+on `/bookings` **and** on `/bookings/quote`.
+
+Room stays are **half-open ranges** `[checkIn, checkOut)`. A stay of `14 Feb → 16 Feb` is
+two nights, and someone else may arrive on the 16th.
+
+### Weekdays are Postgres DOW, read on the house clock
+
+`daysOfWeek` on a price rule uses `0 = Sunday … 6 = Saturday`. It is read on the **house**
+clock, not in UTC: a night beginning at 17:00Z is already tomorrow on the ridge, so a
+"Saturday" rule read in UTC would price the wrong night. An empty or absent array means
+"every day".
+
+A price-rule window is a pair of instants and is **inclusive** of `endDate`. To cover whole
+days, open it at `00:00` and close it at `23:59:59.999` house time — that is how the
+existing rules were migrated.
 
 ### Unknown body fields are silently dropped
 
@@ -302,7 +329,7 @@ export interface RoomResponse {
 }
 
 export interface PriceQuoteLineResponse {
-  date: string | null;   // "YYYY-MM-DD" — one line per night (ROOM), one line total (TOUR)
+  date: string | null;   // ISO instant — the night's start (ROOM), the departure (TOUR)
   quantity: number;
   unitAmount: number;
   amount: number;
@@ -496,7 +523,7 @@ rather than `ON_HOLD` — there is nothing to wait for.
 `CreateTourDto`: `slug` (≤120, unique), `name` (≤120), `description?`, `durationDays` (≥1),
 `basePricePerPerson` (integer ≥ 0).
 
-`CreateTourDepartureDto`: `departureDate` (date-only, **not in the past**), `capacity` (≥1),
+`CreateTourDepartureDto`: `departureDate` (ISO instant, **not in the past**), `capacity` (≥1),
 `priceOverride?` (integer ≥ 0).
 
 `/tours/slug/:slug` resolves the unique `Tour.slug` (`cau-dat-sunrise`, `pine-and-waterfall`,
@@ -516,7 +543,7 @@ through `ParseIntPipe`, so a non-numeric id is a `400` rather than a lookup that
 | `DELETE` | `/price-rules/:id` | — | `204` no body |
 
 `CreatePriceRuleDto`: `name`, **exactly one** of `roomId` / `tourId` (both or neither → `400`),
-`startDate?`, `endDate?` (date-only; `endDate` must not precede `startDate`), `daysOfWeek?`
+`startDate?`, `endDate?` (ISO instants; `endDate` must not precede `startDate`), `daysOfWeek?`
 (0–6, ≤7 entries), `amount` (integer ≥ 0), `priority?`.
 
 Resolution when several rules match: explicit `priority`, then specificity, then the narrower date
@@ -544,8 +571,8 @@ later never rewrites an existing booking's price.
 
   // ROOM
   roomId?: number,
-  checkIn?: string,          // "YYYY-MM-DD", not in the past
-  checkOut?: string,         // must be after checkIn
+  checkIn?: string,          // ISO instant, not in the past
+  checkOut?: string,         // ISO instant, on a later house day than checkIn
 
   // TOUR
   tourDepartureId?: number,
@@ -888,9 +915,10 @@ and is unaffected by the prefix. `test-notification-api.html` is **stale** — i
 - [ ] Branch on `error.code`, never on `error.message`.
 - [ ] Treat `409` on `POST /bookings` as a normal race — refresh availability, do not auto-retry.
 - [ ] Treat `409 "already confirmed"` as success and refetch.
-- [ ] Send calendar dates as `"YYYY-MM-DD"`, built without `toISOString()`.
+- [ ] Send every date as a full ISO instant with a zone, seconds and milliseconds zeroed.
+- [ ] Render every time on the house clock (`Asia/Ho_Chi_Minh`), hour included.
 - [ ] Render money as integer VND — no division by 100.
-- [ ] Count nights as `checkOut - checkIn` (half-open range).
+- [ ] Count nights as the difference in house-clock calendar days, not elapsed hours (half-open range).
 - [ ] Drive the PENDING countdown from `holdExpiresAt`, not from `status`.
 - [ ] Split the emailed cancel link: `GET` renders, `POST` cancels — never cancel on page load.
 - [ ] Pass `auth.userId` on the Socket.IO handshake, and disconnect on unmount.

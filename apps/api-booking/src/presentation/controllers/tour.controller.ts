@@ -21,7 +21,7 @@ import {
   ListToursService,
   SearchAvailableDeparturesService,
 } from '../../application/usecases/tour.service';
-import { toDateRange, toOptionalRange, toUtcDate } from '../utils/payload-dates';
+import { toDateRange, toOptionalRange, toInstant } from '../utils/payload-dates';
 
 @Controller()
 export class TourController {
@@ -73,7 +73,7 @@ export class TourController {
   ): Promise<TourDepartureResponseDto> {
     const departure = await this.createTourDepartureService.execute({
       tourId: data.tourId,
-      departureDate: toUtcDate(data.departureDate, 'departureDate'),
+      departureDate: toInstant(data.departureDate, 'departureDate'),
       capacity: data.capacity,
       priceOverride: data.priceOverride ?? null,
     });

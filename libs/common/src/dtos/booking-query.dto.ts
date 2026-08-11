@@ -1,7 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
-
-const DATE_ONLY = { strict: true } as const;
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIsoInstant } from './is-iso-instant.decorator';
 
 /** Query DTOs rely on ValidationPipe({ transform: true }) to coerce the strings. */
 export class ListRangeQueryDto {
@@ -30,10 +29,10 @@ export class RoomListQueryDto extends ListRangeQueryDto {
 export class TourListQueryDto extends ListRangeQueryDto {}
 
 export class RoomAvailabilityQueryDto extends ListRangeQueryDto {
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   from: string;
 
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   to: string;
 
   @IsOptional()
@@ -44,10 +43,10 @@ export class RoomAvailabilityQueryDto extends ListRangeQueryDto {
 }
 
 export class TourAvailabilityQueryDto {
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   from: string;
 
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   to: string;
 
   @IsOptional()
@@ -59,11 +58,11 @@ export class TourAvailabilityQueryDto {
 
 export class DepartureListQueryDto {
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   from?: string;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   to?: string;
 }
 
@@ -73,11 +72,11 @@ export class BookingHistoryQueryDto extends ListRangeQueryDto {
   status?: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED';
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   from?: string;
 
   @IsOptional()
-  @IsDateString(DATE_ONLY)
+  @IsIsoInstant()
   to?: string;
 }
 

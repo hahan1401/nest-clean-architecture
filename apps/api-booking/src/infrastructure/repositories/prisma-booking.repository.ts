@@ -12,7 +12,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { BookingDetail } from '../../domain/models/booking-detail';
 import type { DateRange } from '../../domain/models/date-range';
-import { toStayWindow } from '../../domain/models/stay-window';
 import {
   BookingHistoryFilter,
   BookingRepository,
@@ -24,16 +23,15 @@ import { ACTIVE_STATUSES } from './booking-status.constants';
 const ROOM_OVERLAP_CONSTRAINT = 'bookings_room_no_overlap';
 
 /**
- * The overlap test, in the same terms as the tsrange in
+ * The overlap test, in the same terms as the tstzrange in
  * bookings_room_no_overlap: a stored stay clashes when it starts before ours
- * ends and ends after ours starts. Callers pass the calendar dates the guest
- * picked; the house times are applied here so the comparison is instant-to-
- * instant and a same-day turnover no longer reads as a collision.
+ * ends and ends after ours starts. Both sides are instants the guest picked, so
+ * a departure at 11:00 and an arrival at 13:00 the same day do not collide.
  */
-const overlapping = (range: DateRange) => {
-  const stay = toStayWindow(range);
-  return { checkIn: { lt: stay.to }, checkOut: { gt: stay.from } };
-};
+const overlapping = (range: DateRange) => ({
+  checkIn: { lt: range.to },
+  checkOut: { gt: range.from },
+});
 
 /**
  * Postgres raises 23P01 (exclusion_violation) when two bookings overlap. Prisma
@@ -85,8 +83,6 @@ export class PrismaBookingRepository extends BookingRepository {
   }
 
   async createRoomBooking(data: CreateRoomBookingData): Promise<Booking | null> {
-    const stay = toStayWindow(data.range);
-
     try {
       // $transaction always runs on the primary, so no $primary() calls inside.
       return await this.prisma.$transaction(async (tx) => {
@@ -100,10 +96,10 @@ export class PrismaBookingRepository extends BookingRepository {
             type: BookableType.ROOM,
             status: BookingStatus.PENDING,
             roomId: data.roomId,
-            // The house times are applied here, at the one boundary where a
-            // calendar range becomes the instants the room is held.
-            checkIn: stay.from,
-            checkOut: stay.to,
+            // Stored exactly as picked. Nothing rewrites the hours: the
+            // exclusion constraint compares these instants directly.
+            checkIn: data.range.from,
+            checkOut: data.range.to,
             guests: data.guests,
             customerName: data.customer.name,
             customerEmail: data.customer.email,
@@ -345,32 +341,33 @@ export class PrismaBookingRepository extends BookingRepository {
     return (result[0]?.expired ?? 0) > 0;
   }
 
-  async closeElapsedDepartures(today: Date): Promise<number> {
+  async closeElapsedDepartures(now: Date): Promise<number> {
     const result = await this.prisma.$primary().tourDeparture.updateMany({
-      where: { status: 'OPEN', departureDate: { lt: today } },
+      where: { status: 'OPEN', departureDate: { lt: now } },
       data: { status: 'CLOSED' },
     });
     return result.count;
   }
 
   /**
-   * A room stay is over once its checkout day has arrived; a tour is over the
-   * day after it departs. Both are compared against UTC midnight, matching the
-   * @db.Date columns.
+   * A stay is over once its checkout instant has passed; a departure is over
+   * once it has left. Both compare instant to instant, so a stay checking out at
+   * 11:00 completes that lunchtime rather than a day later, which is what the
+   * old midnight-versus-timestamp comparison produced.
    */
-  async completeElapsedBookings(today: Date): Promise<number> {
+  async completeElapsedBookings(now: Date): Promise<number> {
     const result = await this.prisma.$primary().$executeRaw`
       UPDATE "bookings" b
       SET "status" = 'COMPLETED', "completed_at" = NOW(), "updated_at" = NOW()
       WHERE b."status" = 'CONFIRMED'
         AND (
-          (b."type" = 'ROOM' AND b."check_out" <= ${today}::date)
+          (b."type" = 'ROOM' AND b."check_out" <= ${now})
           OR (
             b."type" = 'TOUR'
             AND EXISTS (
               SELECT 1 FROM "tour_departures" d
               WHERE d."id" = b."tour_departure_id"
-                AND d."departure_date" < ${today}::date
+                AND d."departure_date" < ${now}
             )
           )
         )

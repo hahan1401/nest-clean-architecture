@@ -14,9 +14,14 @@ import {
   TourDeparture,
 } from '@app/database';
 
-/** Calendar dates leave the API as date-only strings, the same shape they arrive in. */
-const toDateOnly = (value: Date | null | undefined): string | null =>
-  value ? value.toISOString().slice(0, 10) : null;
+/**
+ * Every temporal field leaves the API as a full ISO 8601 instant, the same shape
+ * it arrives in. There is no date-only half of this contract any more: a
+ * departure has an hour, a stay has an arrival time, and a price-rule window has
+ * two ends that are instants like everything else.
+ */
+const toIso = (value: Date | null | undefined): string | null =>
+  value ? value.toISOString() : null;
 
 export class RoomResponseDto {
   id: number;
@@ -47,7 +52,7 @@ export class PriceQuoteLineResponseDto {
   priceRuleId: number | null;
 
   constructor(line: PriceQuoteLine) {
-    this.date = toDateOnly(line.date);
+    this.date = toIso(line.date);
     this.quantity = line.quantity;
     this.unitAmount = line.unitAmount;
     this.amount = line.amount;
@@ -80,10 +85,10 @@ export class RoomAvailabilityResponseDto {
   /** True only for AVAILABLE. Branch on `state` when you need to tell held from sold. */
   available: boolean;
   state: RoomAvailabilityState;
-  /** ISO timestamp the blocking hold lapses; null unless `state` is ON_HOLD. */
-  heldUntil: Date | null;
-  /** ISO timestamp the room is free again; null unless `state` is BOOKED. */
-  availableFrom: Date | null;
+  /** ISO instant the blocking hold lapses; null unless `state` is ON_HOLD. */
+  heldUntil: string | null;
+  /** ISO instant the room is free again; null unless `state` is BOOKED. */
+  availableFrom: string | null;
   quote: PriceQuoteResponseDto | null;
 
   constructor(
@@ -96,8 +101,8 @@ export class RoomAvailabilityResponseDto {
     this.room = new RoomResponseDto(room);
     this.available = state === 'AVAILABLE';
     this.state = state;
-    this.heldUntil = heldUntil;
-    this.availableFrom = availableFrom;
+    this.heldUntil = toIso(heldUntil);
+    this.availableFrom = toIso(availableFrom);
     this.quote = quote ? new PriceQuoteResponseDto(quote) : null;
   }
 }
@@ -135,7 +140,7 @@ export class TourDepartureResponseDto {
   constructor(departure: TourDeparture) {
     this.id = departure.id;
     this.tourId = departure.tourId;
-    this.departureDate = toDateOnly(departure.departureDate);
+    this.departureDate = toIso(departure.departureDate);
     this.capacity = departure.capacity;
     this.bookedSeats = departure.bookedSeats;
     this.remainingSeats = departure.capacity - departure.bookedSeats;
@@ -173,8 +178,8 @@ export class PriceRuleResponseDto {
     this.name = rule.name;
     this.roomId = rule.roomId ?? null;
     this.tourId = rule.tourId ?? null;
-    this.startDate = toDateOnly(rule.startDate);
-    this.endDate = toDateOnly(rule.endDate);
+    this.startDate = toIso(rule.startDate);
+    this.endDate = toIso(rule.endDate);
     this.daysOfWeek = rule.daysOfWeek;
     this.amount = rule.amount;
     this.priority = rule.priority;
@@ -190,7 +195,7 @@ export class BookingLineResponseDto {
   priceSource: PriceSource;
 
   constructor(line: BookingLine) {
-    this.date = toDateOnly(line.lineDate);
+    this.date = toIso(line.lineDate);
     this.quantity = line.quantity;
     this.unitAmount = line.unitAmount;
     this.amount = line.amount;
@@ -211,11 +216,12 @@ export class BookingResponseDto {
 
   roomId: number | null;
   /**
-   * Instants, not calendar dates: 13:00 on the arrival day to 11:00 on the
-   * departure day. The guest still picks dates - these are what the house holds.
+   * The instants the guest picked, ISO 8601. The site defaults to 13:00 arrival
+   * and 11:00 departure on the house clock; these are what the house actually
+   * holds, and they read back in exactly the shape they were sent.
    */
-  checkIn: Date | null;
-  checkOut: Date | null;
+  checkIn: string | null;
+  checkOut: string | null;
 
   tourDepartureId: number | null;
   seats: number | null;
@@ -229,11 +235,11 @@ export class BookingResponseDto {
   currency: string;
   notes: string | null;
 
-  holdExpiresAt: Date | null;
-  confirmedAt: Date | null;
-  cancelledAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date;
+  holdExpiresAt: string | null;
+  confirmedAt: string | null;
+  cancelledAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
 
   lines: BookingLineResponseDto[] | null;
 
@@ -243,8 +249,8 @@ export class BookingResponseDto {
     this.type = booking.type;
     this.status = booking.status;
     this.roomId = booking.roomId ?? null;
-    this.checkIn = booking.checkIn ?? null;
-    this.checkOut = booking.checkOut ?? null;
+    this.checkIn = toIso(booking.checkIn);
+    this.checkOut = toIso(booking.checkOut);
     this.tourDepartureId = booking.tourDepartureId ?? null;
     this.seats = booking.seats ?? null;
     this.guests = booking.guests;
@@ -254,11 +260,11 @@ export class BookingResponseDto {
     this.totalAmount = booking.totalAmount;
     this.currency = booking.currency;
     this.notes = booking.notes ?? null;
-    this.holdExpiresAt = booking.holdExpiresAt ?? null;
-    this.confirmedAt = booking.confirmedAt ?? null;
-    this.cancelledAt = booking.cancelledAt ?? null;
-    this.completedAt = booking.completedAt ?? null;
-    this.createdAt = booking.createdAt;
+    this.holdExpiresAt = toIso(booking.holdExpiresAt);
+    this.confirmedAt = toIso(booking.confirmedAt);
+    this.cancelledAt = toIso(booking.cancelledAt);
+    this.completedAt = toIso(booking.completedAt);
+    this.createdAt = booking.createdAt.toISOString();
     this.lines = booking.lines
       ? booking.lines.map((line) => new BookingLineResponseDto(line))
       : null;

@@ -3,7 +3,8 @@ import { Booking, BookingStatus } from '@app/database';
 import { Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import type { BookingDetail } from '../../domain/models/booking-detail';
-import { nightCount, todayUtc } from '../../domain/models/date-range';
+import { nightCount } from '../../domain/models/date-range';
+import { nowHouseDayStart } from '../../domain/models/house-clock';
 import {
   BookingCancelledNotification,
   BookingNotifierPort,
@@ -110,7 +111,7 @@ export class CancelBookingService implements CancelBookingUseCase {
     }
 
     const { booking } = detail;
-    assertCancellable(booking, todayUtc());
+    assertCancellable(booking, nowHouseDayStart());
 
     const reason = input.reason ?? null;
     const cancelled = await this.bookingRepository.markCancelled(booking.id, new Date(), reason);
@@ -184,7 +185,7 @@ export class CancelBookingByTokenService implements CancelBookingByTokenUseCase 
     if (!booking) {
       throw new NotFoundError('Booking not found');
     }
-    assertCancellable(booking, todayUtc());
+    assertCancellable(booking, nowHouseDayStart());
 
     // Two different values on purpose. The stored one is an audit trail and always
     // says something; the displayed one is only what the guest actually typed, so

@@ -107,6 +107,21 @@ describe('SearchAvailableRoomsService', () => {
     ).rejects.toBeInstanceOf(ValidationError);
     expect(roomRepository.findAvailable).not.toHaveBeenCalled();
   });
+
+  it('rejects a same-day range even though the hours move forwards', async () => {
+    // Arrive 09:00, leave 20:00 on the ridge: eleven hours, zero nights, and
+    // nothing to charge for. `to > from` alone stopped catching this once the
+    // guest could pick the time of day.
+    await expect(
+      service.execute({
+        range: {
+          from: new Date('2099-02-13T02:00:00.000Z'),
+          to: new Date('2099-02-13T13:00:00.000Z'),
+        },
+      }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(roomRepository.findAvailable).not.toHaveBeenCalled();
+  });
 });
 
 describe('CheckRoomAvailabilityService', () => {

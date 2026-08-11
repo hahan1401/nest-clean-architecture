@@ -17,7 +17,7 @@ import {
   QuotePriceInput,
   QuotePriceUseCase,
 } from '../../domain/usecases/price-rule.usecase';
-import { assertUsableRange } from './room.service';
+import { assertStayRange } from './room.service';
 
 @Injectable()
 export class CreatePriceRuleService implements CreatePriceRuleUseCase {
@@ -91,7 +91,9 @@ export class QuotePriceService implements QuotePriceUseCase {
 
   async execute(input: QuotePriceInput): Promise<PriceQuote> {
     if (input.type === 'ROOM') {
-      assertUsableRange(input.range);
+      // A stay, not a search window: quoting a range that crosses no night would
+      // otherwise answer "0 VND" to a question that has no valid answer.
+      assertStayRange(input.range);
       const room = await this.roomRepository.findById(input.roomId);
       if (!room) {
         throw new NotFoundError(`Room with id ${input.roomId} not found`);

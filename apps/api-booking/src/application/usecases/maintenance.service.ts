@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { todayUtc } from '../../domain/models/date-range';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import {
   CloseElapsedDeparturesUseCase,
@@ -31,12 +30,18 @@ export class ExpireBookingHoldService implements ExpireBookingHoldUseCase {
   }
 }
 
+/**
+ * `now` goes to the repository as the instant it is. Departures and stays carry
+ * a time of day now, so "has it elapsed?" is a straight instant comparison and
+ * no longer needs rounding to a day - which also retires the timezone skew the
+ * old midnight-based version had in a UTC+7 deployment.
+ */
 @Injectable()
 export class CloseElapsedDeparturesService implements CloseElapsedDeparturesUseCase {
   constructor(private readonly bookingRepository: BookingRepository) {}
 
   execute(now: Date = new Date()): Promise<number> {
-    return this.bookingRepository.closeElapsedDepartures(todayUtc(now));
+    return this.bookingRepository.closeElapsedDepartures(now);
   }
 }
 
@@ -45,6 +50,6 @@ export class CompleteElapsedBookingsService implements CompleteElapsedBookingsUs
   constructor(private readonly bookingRepository: BookingRepository) {}
 
   execute(now: Date = new Date()): Promise<number> {
-    return this.bookingRepository.completeElapsedBookings(todayUtc(now));
+    return this.bookingRepository.completeElapsedBookings(now);
   }
 }

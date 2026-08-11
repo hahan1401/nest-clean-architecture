@@ -1,7 +1,7 @@
 import { ConflictError, NotFoundError, ValidationError } from '@app/common';
 import { AvailableDeparture, Booking, Tour, TourDeparture } from '@app/database';
 import { Injectable } from '@nestjs/common';
-import { todayUtc } from '../../domain/models/date-range';
+import { HOUSE_ZONE_LABEL, houseMoment, nowHouseDayStart } from '../../domain/models/house-clock';
 import { BookingRepository } from '../../domain/repositories/booking.repository';
 import {
   CreateTourDepartureData,
@@ -91,7 +91,7 @@ export class CreateTourDepartureService implements CreateTourDepartureUseCase {
     if (data.capacity < 1) {
       throw new ValidationError('capacity must be at least 1');
     }
-    if (data.departureDate < todayUtc()) {
+    if (data.departureDate < nowHouseDayStart()) {
       throw new ValidationError('departureDate cannot be in the past');
     }
 
@@ -106,7 +106,7 @@ export class CreateTourDepartureService implements CreateTourDepartureUseCase {
     );
     if (existing) {
       throw new ConflictError(
-        `Tour ${tour.slug} already has a departure on ${data.departureDate.toISOString().slice(0, 10)}`,
+        `Tour ${tour.slug} already has a departure at ${houseMoment(data.departureDate)} (${HOUSE_ZONE_LABEL})`,
       );
     }
 

@@ -5,16 +5,17 @@ export class UserResponseDto {
   name: string;
   email: string;
   locationName: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  /** ISO 8601 instants, the one temporal shape this API speaks. */
+  createdAt: string;
+  updatedAt: string;
 
   constructor(user: User) {
     this.id = user.id;
     this.name = user.name;
     this.email = user.email;
     this.locationName = user.locationName ?? null;
-    this.createdAt = user.createdAt;
-    this.updatedAt = user.updatedAt;
+    this.createdAt = user.createdAt.toISOString();
+    this.updatedAt = user.updatedAt.toISOString();
   }
 }
 

@@ -2,7 +2,6 @@ import { BookingStatus, PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '
 import { Inject, Injectable } from '@nestjs/common';
 import type { RoomAvailabilityState, RoomOffer } from '../../domain/models/availability';
 import { DateRange } from '../../domain/models/date-range';
-import { toStayWindow } from '../../domain/models/stay-window';
 import {
   CreateRoomData,
   RoomListFilter,
@@ -10,11 +9,11 @@ import {
 } from '../../domain/repositories/room.repository';
 import { SLOT_HOLDING_STATUSES } from './booking-status.constants';
 
-/** Same terms as the tsrange constraint; the house times are applied here. */
-const overlapping = (range: DateRange) => {
-  const stay = toStayWindow(range);
-  return { checkIn: { lt: stay.to }, checkOut: { gt: stay.from } };
-};
+/** Same terms as the tstzrange constraint, over the instants as given. */
+const overlapping = (range: DateRange) => ({
+  checkIn: { lt: range.to },
+  checkOut: { gt: range.from },
+});
 
 @Injectable()
 export class PrismaRoomRepository extends RoomRepository {
@@ -57,8 +56,9 @@ export class PrismaRoomRepository extends RoomRepository {
    *
    * The overlap test is [checkIn, checkOut): an existing booking clashes when it
    * starts before our checkout AND ends after our check-in. Identical semantics
-   * to the '[)' tsrange in bookings_room_no_overlap, so this can never disagree
-   * with the constraint - including the same-day turnover the hours now allow.
+   * to the '[)' tstzrange in bookings_room_no_overlap, so this can never
+   * disagree with the constraint - including the same-day turnover the hours
+   * allow.
    *
    * Every room the guest count fits is returned, sold ones included. A guest
    * looking at a full house still wants to see what the house has and when it

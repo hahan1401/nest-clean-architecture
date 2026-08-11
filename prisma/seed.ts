@@ -20,18 +20,46 @@ const prisma = new PrismaClient({ adapter });
  */
 
 /**
- * Today at UTC midnight, then N whole days on. Departures are seeded relative
- * to seed time so a fresh database always has future departures to sell - the
- * same trick `DEPARTURE_FIXTURES` uses on the frontend.
+ * N whole days from today, at a given hour on the HOUSE clock, as an instant.
+ * Departures are seeded relative to seed time so a fresh database always has
+ * future departures to sell - the same trick `DEPARTURE_FIXTURES` uses on the
+ * frontend.
  *
- * @db.Date columns materialise as UTC midnight, so calendar dates are built
- * with Date.UTC (or from a date-only ISO string). Never `new Date(y, m, d)` -
- * that is local time and shifts the night by one in any non-UTC process.
+ * Every temporal column is a timestamptz now, so a seeded departure is a moment
+ * and not a day: it leaves at 07:10 on the ridge, which is 00:10Z. The offset is
+ * applied as arithmetic (Vietnam is UTC+7 all year) rather than through
+ * `new Date(y, m, d, h)`, which would read the *process* timezone and shift the
+ * departure by hours in any non-UTC container.
  */
-const dayFromToday = (offsetDays: number): Date => {
+const HOUSE_UTC_OFFSET_HOURS = 7;
+
+const houseTimeFromToday = (offsetDays: number, hour: number, minute = 0): Date => {
   const today = new Date();
   return new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + offsetDays),
+    Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate() + offsetDays,
+      hour - HOUSE_UTC_OFFSET_HOURS,
+      minute,
+    ),
+  );
+};
+
+/** Journeys leave at 07:10 on the ridge. */
+const DEPARTURE_HOUR = 7;
+const DEPARTURE_MINUTE = 10;
+
+const departureInstant = (offsetDays: number): Date =>
+  houseTimeFromToday(offsetDays, DEPARTURE_HOUR, DEPARTURE_MINUTE);
+
+/** `"14/02/2027 07:10"` on the house clock, for the seed summary line. */
+const houseMoment = (instant: Date): string => {
+  const local = new Date(instant.getTime() + HOUSE_UTC_OFFSET_HOURS * 3_600_000);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return (
+    `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)}/${local.getUTCFullYear()}` +
+    ` ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`
   );
 };
 
@@ -137,7 +165,8 @@ const DEPARTURES = [
 /**
  * The frontend prices Friday and Saturday nights at 1.25x base. Here that is
  * one real PriceRule per room: daysOfWeek uses Postgres DOW numbering
- * (0 = Sunday .. 6 = Saturday), which is also what Date#getUTCDay returns.
+ * (0 = Sunday .. 6 = Saturday), read on the house clock so a Friday night is the
+ * Friday a guest on the ridge would call it.
  *
  * PriceRule.amount is an absolute price, not a multiplier, so the factor is
  * applied here and rounded to the nearest 1.000 VND exactly as the fixture does.
@@ -206,11 +235,11 @@ async function seedBookingDomain() {
   });
   const tourIdBySlug = new Map(tours.map((tour) => [tour.slug, tour.id]));
 
-  await dropRolledDepartures(DEPARTURES.map((departure) => dayFromToday(departure.inDays)));
+  await dropRolledDepartures(DEPARTURES.map((departure) => departureInstant(departure.inDays)));
 
   for (const departure of DEPARTURES) {
     const tourId = tourIdBySlug.get(departure.slug)!;
-    const departureDate = dayFromToday(departure.inDays);
+    const departureDate = departureInstant(departure.inDays);
     const data = {
       tourId,
       departureDate,
@@ -256,10 +285,8 @@ async function seedBookingDomain() {
     }
   }
 
-  const firstDeparture = dayFromToday(DEPARTURES[0].inDays).toISOString().slice(0, 10);
-  const lastDeparture = dayFromToday(DEPARTURES[DEPARTURES.length - 1].inDays)
-    .toISOString()
-    .slice(0, 10);
+  const firstDeparture = houseMoment(departureInstant(DEPARTURES[0].inDays));
+  const lastDeparture = houseMoment(departureInstant(DEPARTURES[DEPARTURES.length - 1].inDays));
 
   console.log(
     `Thong Dong Retreat seeded: ${ROOMS.length} rooms, ${TOURS.length} journeys, ` +

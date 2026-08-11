@@ -40,6 +40,7 @@ export class Tour {
 export class TourDeparture {
   id: number;
   tourId: number;
+  /** The instant the journey leaves, not the day it leaves on. */
   departureDate: Date;
   capacity: number;
   bookedSeats: number;
@@ -72,9 +73,13 @@ export class PriceRule {
   name: string;
   roomId?: number | null;
   tourId?: number | null;
+  /** Inclusive window of instants; null on either side means unbounded there. */
   startDate?: Date | null;
   endDate?: Date | null;
-  /** Postgres DOW numbering: 0 = Sunday .. 6 = Saturday. Empty = every day. */
+  /**
+   * Postgres DOW numbering: 0 = Sunday .. 6 = Saturday, read on the HOUSE clock
+   * (see houseWeekday). Empty = every day.
+   */
   daysOfWeek: number[];
   /** Overriding price in whole VND. */
   amount: number;
@@ -91,6 +96,7 @@ export class PriceRule {
 export class BookingLine {
   id: number;
   bookingId: number;
+  /** The instant a stay night begins on the house clock; the departure for tours. */
   lineDate: Date;
   quantity: number;
   unitAmount: number;
@@ -109,7 +115,7 @@ export class BookingLine {
  * This is the shape that gets frozen into BookingLine rows at booking time.
  */
 export class PriceQuoteLine {
-  /** UTC midnight, matching how Prisma materialises @db.Date columns. */
+  /** The instant the night begins on the house clock (00:00 +07). */
   date: Date;
   /** 1 per night for rooms; the seat count for tours. */
   quantity: number;
@@ -142,6 +148,7 @@ export class Booking {
   status: BookingStatus;
 
   roomId?: number | null;
+  /** The instants the room is held, exactly as the guest picked them. */
   checkIn?: Date | null;
   checkOut?: Date | null;
 

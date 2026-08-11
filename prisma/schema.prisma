@@ -15,9 +15,9 @@ model User {
   latitude          Float?
   longitude         Float?
   locationName      String?   @map("location_name")
-  locationUpdatedAt DateTime? @map("location_updated_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  locationUpdatedAt DateTime? @map("location_updated_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   @@index([latitude, longitude])
   @@map("users")
@@ -26,8 +26,8 @@ model User {
 model Document {
   id        Int             @id @default(autoincrement())
   fileName  String          @map("file_name")
-  createdAt DateTime        @default(now()) @map("created_at")
-  updatedAt DateTime        @updatedAt @map("updated_at")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   chunks    DocumentChunk[]
 
   @@unique([fileName])
@@ -40,7 +40,7 @@ model DocumentChunk {
   chunkIndex Int                         @map("chunk_index")
   content    String
   embedding  Unsupported("vector(1536)")
-  createdAt  DateTime                    @default(now()) @map("created_at")
+  createdAt  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -53,6 +53,11 @@ model DocumentChunk {
 //
 // Money convention: every *price / *amount column is a whole number of VND
 // (dong). VND has no minor unit, so there is no scaling factor anywhere.
+//
+// Time convention: every temporal column is timestamptz - an instant, never a
+// calendar day. The wire carries ISO 8601 in and out. The house clock
+// (Asia/Ho_Chi_Minh, UTC+7 year round, no DST) is applied only where a human
+// reads or picks a time; see apps/api-booking/src/domain/models/house-clock.ts.
 // ---------------------------------------------------------------------------
 
 /// PENDING holds the slot the moment it is created; CONFIRMED is the explicit
@@ -101,8 +106,8 @@ model Room {
   /// Nightly rate in whole VND. Overridable per night by PriceRule.
   basePrice   Int      @map("base_price")
   isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   bookings   Booking[]
   priceRules PriceRule[]
@@ -120,8 +125,8 @@ model Tour {
   /// Per-person price in whole VND.
   basePricePerPerson Int      @map("base_price_per_person")
   isActive           Boolean  @default(true) @map("is_active")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   departures TourDeparture[]
   priceRules PriceRule[]
@@ -134,7 +139,10 @@ model Tour {
 model TourDeparture {
   id            Int             @id @default(autoincrement())
   tourId        Int             @map("tour_id")
-  departureDate DateTime        @map("departure_date") @db.Date
+  /// The instant the journey leaves, not the day it leaves on. The unique key
+  /// below therefore compares instants: one tour may run a morning and an
+  /// afternoon departure on the same day.
+  departureDate DateTime        @map("departure_date") @db.Timestamptz(3)
   capacity      Int
   /// Seats held by PENDING + CONFIRMED + COMPLETED bookings. Maintained inside
   /// the same transaction as the booking write and guarded by
@@ -143,8 +151,8 @@ model TourDeparture {
   /// Per-departure price per person in whole VND. Beats PriceRule when set.
   priceOverride Int?            @map("price_override")
   status        DepartureStatus @default(OPEN)
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  createdAt     DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tour     Tour      @relation(fields: [tourId], references: [id], onDelete: Cascade)
   bookings Booking[]
@@ -162,19 +170,21 @@ model PriceRule {
   name       String
   roomId     Int?      @map("room_id")
   tourId     Int?      @map("tour_id")
-  /// Inclusive window; NULL on either side means unbounded there.
-  startDate  DateTime? @map("start_date") @db.Date
-  endDate    DateTime? @map("end_date") @db.Date
-  /// Postgres DOW numbering: 0 = Sunday .. 6 = Saturday (matches Date#getUTCDay
-  /// and EXTRACT(DOW)). Empty array = applies to every day in the window.
+  /// Inclusive window of instants; NULL on either side means unbounded there. A
+  /// night matches when the instant it begins falls inside [startDate, endDate].
+  startDate  DateTime? @map("start_date") @db.Timestamptz(3)
+  endDate    DateTime? @map("end_date") @db.Timestamptz(3)
+  /// Postgres DOW numbering: 0 = Sunday .. 6 = Saturday. Read on the HOUSE clock
+  /// (houseWeekday), not in UTC - a night beginning 17:00Z is already tomorrow
+  /// on the ridge. Empty array = applies to every day in the window.
   daysOfWeek Int[]     @map("days_of_week")
   /// Overriding price in whole VND: per night for rooms, per person for tours.
   amount     Int
   /// Higher wins. Ties broken by specificity, then window width, then recency.
   priority   Int       @default(0)
   isActive   Boolean   @default(true) @map("is_active")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   room         Room?         @relation(fields: [roomId], references: [id], onDelete: Cascade)
   tour         Tour?         @relation(fields: [tourId], references: [id], onDelete: Cascade)
@@ -198,13 +208,14 @@ model Booking {
   type              BookableType
   status            BookingStatus @default(PENDING)
 
-  roomId Int? @map("room_id")
-  /// The instants the room is held, not calendar dates: 13:00 on the arrival day
-  /// to 11:00 on the departure day (see stay-window.ts). Storing the hours is
-  /// what lets one guest leave and another arrive on the same day - the
-  /// bookings_room_no_overlap tsrange would otherwise call that an overlap.
-  checkIn  DateTime? @map("check_in")
-  checkOut DateTime? @map("check_out")
+  roomId   Int?      @map("room_id")
+  /// The instants the room is held, exactly as the guest picked them - the site
+  /// defaults to 13:00 arrival and 11:00 departure on the house clock but does
+  /// not impose them. Holding the hours is what lets one guest leave and another
+  /// arrive on the same day; the bookings_room_no_overlap tstzrange would
+  /// otherwise call that an overlap.
+  checkIn  DateTime? @map("check_in") @db.Timestamptz(3)
+  checkOut DateTime? @map("check_out") @db.Timestamptz(3)
 
   tourDepartureId Int? @map("tour_departure_id")
   seats           Int?
@@ -222,12 +233,12 @@ model Booking {
 
   notes         String?
   /// PENDING holds expire at this instant; the sweep flips them to EXPIRED.
-  holdExpiresAt DateTime? @map("hold_expires_at")
-  confirmedAt   DateTime? @map("confirmed_at")
-  cancelledAt   DateTime? @map("cancelled_at")
-  completedAt   DateTime? @map("completed_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  holdExpiresAt DateTime? @map("hold_expires_at") @db.Timestamptz(3)
+  confirmedAt   DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt   DateTime? @map("cancelled_at") @db.Timestamptz(3)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   // Restrict, not Cascade: booking history must outlive product edits.
   // Retiring a room/tour is isActive = false, never a DELETE.
@@ -247,8 +258,9 @@ model Booking {
 model BookingLine {
   id          Int         @id @default(autoincrement())
   bookingId   Int         @map("booking_id")
-  /// Stay night for rooms (checkIn .. checkOut-1); departure date for tours.
-  lineDate    DateTime    @map("line_date") @db.Date
+  /// The instant a stay night begins on the house clock (00:00 +07), one row per
+  /// night; the departure instant for tours.
+  lineDate    DateTime    @map("line_date") @db.Timestamptz(3)
   /// 1 per night for rooms; seat count for tours.
   quantity    Int
   /// Frozen unit price in whole VND at the moment of booking.
@@ -258,7 +270,7 @@ model BookingLine {
   priceSource PriceSource @map("price_source")
   /// SetNull: deleting a rule must not destroy history; the amount is frozen.
   priceRuleId Int?        @map("price_rule_id")
-  createdAt   DateTime    @default(now()) @map("created_at")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
 
   booking   Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   priceRule PriceRule? @relation(fields: [priceRuleId], references: [id], onDelete: SetNull)

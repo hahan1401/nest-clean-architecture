@@ -96,8 +96,8 @@ export class PrismaTourDepartureRepository extends TourDepartureRepository {
       JOIN "tours" t ON t."id" = d."tour_id"
       WHERE d."status" = 'OPEN'
         AND t."is_active"
-        AND d."departure_date" >= ${range.from}::date
-        AND d."departure_date" < ${range.to}::date
+        AND d."departure_date" >= ${range.from}
+        AND d."departure_date" < ${range.to}
         AND (d."capacity" - d."booked_seats") >= ${seats}
         ${tourFilter}
       ORDER BY d."departure_date" ASC
