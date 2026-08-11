@@ -46,14 +46,6 @@ export class ValidationError extends DomainError {
   readonly code = ErrorCode.VALIDATION;
 }
 
-export class UnauthorizedError extends DomainError {
-  readonly code = ErrorCode.UNAUTHORIZED;
-}
-
-export class ForbiddenError extends DomainError {
-  readonly code = ErrorCode.FORBIDDEN;
-}
-
 export class DependencyError extends DomainError {
   readonly code = ErrorCode.DEPENDENCY_FAILURE;
 }

@@ -920,9 +920,8 @@ The gateway starts even when a downstream service is down — those routes then 
 to start that service. A blanket `404` on every route, by contrast, almost always means a missing
 `/api`.
 
-Two ready-made harnesses live in the repo root. `websocket-test-client.html` connects to the origin
-and is unaffected by the prefix. `test-notification-api.html` is **stale** — its `API_BASE` is still
-`http://localhost:3000/notifications` and needs `/api` inserted before it will do anything but 404.
+A ready-made harness lives in the repo root: `websocket-test-client.html` connects to the origin and
+is unaffected by the prefix.
 
 ---
 

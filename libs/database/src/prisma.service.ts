@@ -32,7 +32,7 @@ const createAdapter = (connectionString: string, role: 'primary' | 'replica'): P
   });
 
 /** Comma-separated replica URLs; empty when no replicas are configured. */
-export const parseReplicaUrls = (): string[] =>
+const parseReplicaUrls = (): string[] =>
   (process.env.DATABASE_REPLICA_URLS ?? '')
     .split(',')
     .map((url) => url.trim())

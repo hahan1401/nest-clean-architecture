@@ -38,7 +38,7 @@ const windowDays = (rule: PriceRule): number =>
  * Determinism matters more than cleverness here: the resolved price is frozen
  * onto the booking, so the same inputs must always produce the same money.
  */
-export const compareRules = (a: PriceRule, b: PriceRule): number =>
+const compareRules = (a: PriceRule, b: PriceRule): number =>
   b.priority - a.priority ||
   specificity(b) - specificity(a) ||
   windowDays(a) - windowDays(b) ||

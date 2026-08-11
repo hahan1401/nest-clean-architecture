@@ -10,8 +10,8 @@ import { Namespace, Socket } from 'socket.io';
 import { Notification } from '../../domain/entities/notification.entity';
 import { NotificationPublisherPort } from '../../domain/ports/notification-publisher.port';
 
-export const NOTIFICATION_EVENT = 'notification';
-export const NOTIFICATION_NAMESPACE = /^\/notification.*/;
+const NOTIFICATION_EVENT = 'notification';
+const NOTIFICATION_NAMESPACE = /^\/notification.*/;
 
 type SocketData = { userId?: string };
 
