@@ -102,11 +102,30 @@ wherever the guest is sitting. So a form showing `14/02/2027 13:00` sends
 `"2027-02-14T06:00:00.000Z"`, and rendering that instant back in `Asia/Ho_Chi_Minh` shows
 `13:00` again.
 
-The site defaults to a 13:00 arrival and an 11:00 departure, but they are **defaults, not
-rules** — the guest may pick any half-hour, and the booking stores what was picked. Those
-default hours are what lets the house turn a room over in a day: a stay ending at 11:00 and
-one starting at 13:00 on the same date do not collide, so the room shows free for the
-incoming guest. Always render a stay with its hour; dropping it hides the turnover.
+**The house has no check-in or check-out hour.** A guest arrives and leaves when they choose,
+the booking stores what was picked, and the site offers any half-hour. Do not publish a fixed
+arrival or departure time — there is no field for one, and there is nothing behind it.
+
+Always render a stay with its hour. Dropping it hides the only thing that decides whether a
+room is free that afternoon or the next morning.
+
+#### An hour between one guest and the next
+
+The one rule between two stays is the turnover. A room is bookable again **one hour after the
+previous guest checks out** — check out at 15:00 and the room is free from 16:00.
+
+This is a database invariant, not a convention: `bookings_room_no_overlap` compares
+`room_stay_occupancy(check_in, check_out)`, which is the stay plus that hour, so a booking
+that arrives inside the gap comes back `409 CONFLICT` however it was sent. Same-day turnover
+is still the point — a departure at 11:00 and an arrival at 13:00 do not collide — but 11:30
+now does.
+
+Two consequences for the site:
+
+- `availableFrom` on a `BOOKED` room is already **checkout plus the hour**. It is the instant
+  the guest can actually book from, so render it as given; do not add or subtract anything.
+- A range that starts less than an hour after an existing stay is not bookable even though
+  the two do not overlap. Availability says so before the guest reaches the button.
 
 #### Nights are calendar nights, on the house clock
 
@@ -126,7 +145,7 @@ A stay must cross at least one night. `14 Feb 09:00 → 14 Feb 20:00` is rejecte
 on `/bookings` **and** on `/bookings/quote`.
 
 Room stays are **half-open ranges** `[checkIn, checkOut)`. A stay of `14 Feb → 16 Feb` is
-two nights, and someone else may arrive on the 16th.
+two nights, and someone else may arrive on the 16th — an hour after this guest leaves.
 
 ### Weekdays are Postgres DOW, read on the house clock
 

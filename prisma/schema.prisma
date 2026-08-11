@@ -209,11 +209,14 @@ model Booking {
   status            BookingStatus @default(PENDING)
 
   roomId   Int?      @map("room_id")
-  /// The instants the room is held, exactly as the guest picked them - the site
-  /// defaults to 13:00 arrival and 11:00 departure on the house clock but does
-  /// not impose them. Holding the hours is what lets one guest leave and another
-  /// arrive on the same day; the bookings_room_no_overlap tstzrange would
-  /// otherwise call that an overlap.
+  /// The instants the room is held, exactly as the guest picked them - the house
+  /// sells no fixed arrival or departure hour. Holding the hours is what lets one
+  /// guest leave and another arrive on the same day; the
+  /// bookings_room_no_overlap tstzrange would otherwise call that an overlap.
+  ///
+  /// What the constraint compares is not this range but room_stay_occupancy() of
+  /// it - the stay plus the turnover hour the room needs afterwards - so the next
+  /// arrival is never sooner than an hour after this departure.
   checkIn  DateTime? @map("check_in") @db.Timestamptz(3)
   checkOut DateTime? @map("check_out") @db.Timestamptz(3)
 

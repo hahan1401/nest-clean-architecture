@@ -23,10 +23,14 @@ import { ACTIVE_STATUSES } from './booking-status.constants';
 const ROOM_OVERLAP_CONSTRAINT = 'bookings_room_no_overlap';
 
 /**
- * The overlap test, in the same terms as the tstzrange in
- * bookings_room_no_overlap: a stored stay clashes when it starts before ours
- * ends and ends after ours starts. Both sides are instants the guest picked, so
- * a departure at 11:00 and an arrival at 13:00 the same day do not collide.
+ * Which stays fall inside a window, for booking *history*: a stored stay counts
+ * when it starts before the window ends and ends after the window starts.
+ *
+ * Deliberately the plain stay range and not the occupancy window the
+ * availability query uses. This one answers "what happened between these two
+ * instants", and a stay that ended forty minutes before the window opened did
+ * not happen inside it - the turnover hour blocks the next booking, it does not
+ * extend the last guest's stay into a report.
  */
 const overlapping = (range: DateRange) => ({
   checkIn: { lt: range.to },

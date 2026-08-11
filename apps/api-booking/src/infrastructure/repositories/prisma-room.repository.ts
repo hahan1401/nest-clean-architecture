@@ -1,7 +1,7 @@
 import { BookingStatus, PRISMA_SERVICE, Room, type ExtendedPrismaClient } from '@app/database';
 import { Inject, Injectable } from '@nestjs/common';
 import type { RoomAvailabilityState, RoomOffer } from '../../domain/models/availability';
-import { DateRange } from '../../domain/models/date-range';
+import { DateRange, TURNOVER_MS, occupancyWindow } from '../../domain/models/date-range';
 import {
   CreateRoomData,
   RoomListFilter,
@@ -9,10 +9,19 @@ import {
 } from '../../domain/repositories/room.repository';
 import { SLOT_HOLDING_STATUSES } from './booking-status.constants';
 
-/** Same terms as the tstzrange constraint, over the instants as given. */
-const overlapping = (range: DateRange) => ({
-  checkIn: { lt: range.to },
-  checkOut: { gt: range.from },
+/**
+ * Same terms as the tstzrange constraint: the two *occupancy* windows overlap.
+ *
+ * A stored stay clashes with the requested one when it starts before the request
+ * gives the room back (`checkIn < to + turnover`) and gives the room back after
+ * the request starts (`checkOut + turnover > from`). The second is written as
+ * `checkOut > from - turnover` so the comparison is against a column rather than
+ * an expression, which is the same inequality with the hour moved to the other
+ * side, and lets the index be used.
+ */
+export const overlapping = (range: DateRange) => ({
+  checkIn: { lt: occupancyWindow(range).to },
+  checkOut: { gt: new Date(range.from.getTime() - TURNOVER_MS) },
 });
 
 @Injectable()
@@ -54,11 +63,11 @@ export class PrismaRoomRepository extends RoomRepository {
    * worst case is showing a room that was taken moments ago, which the exclusion
    * constraint turns into an honest 409 at booking time rather than an overbook.
    *
-   * The overlap test is [checkIn, checkOut): an existing booking clashes when it
-   * starts before our checkout AND ends after our check-in. Identical semantics
-   * to the '[)' tstzrange in bookings_room_no_overlap, so this can never
-   * disagree with the constraint - including the same-day turnover the hours
-   * allow.
+   * The overlap test is over occupancy windows - the stay plus its turnover hour
+   * - and is identical to the '[)' tstzrange in bookings_room_no_overlap, so
+   * this can never disagree with the constraint. Same-day turnover still works:
+   * a guest leaving at 11:00 and one arriving at 13:00 do not collide, while one
+   * arriving at 11:30 now does.
    *
    * Every room the guest count fits is returned, sold ones included. A guest
    * looking at a full house still wants to see what the house has and when it
@@ -94,7 +103,7 @@ export class PrismaRoomRepository extends RoomRepository {
           room: new Room(room),
           held: false,
           heldUntil: null,
-          availableFrom: latestCheckOut([...sold, ...holds]),
+          availableFrom: readyFrom([...sold, ...holds]),
         };
       }
 
@@ -138,7 +147,7 @@ export class PrismaRoomRepository extends RoomRepository {
     // A single sold night outranks any number of holds: the window as a whole
     // cannot free up, however the holds resolve.
     if (clashes.some((clash) => clash.status !== BookingStatus.PENDING)) {
-      return { state: 'BOOKED', heldUntil: null, availableFrom: latestCheckOut(clashes) };
+      return { state: 'BOOKED', heldUntil: null, availableFrom: readyFrom(clashes) };
     }
 
     return { state: 'ON_HOLD', heldUntil: latestHoldExpiry(clashes), availableFrom: null };
@@ -146,13 +155,19 @@ export class PrismaRoomRepository extends RoomRepository {
 }
 
 /**
- * When the room is free again: the checkout of the last stay overlapping the
- * requested window. Not "the next window that fits" - that is a different and
- * much more expensive question, and this one is what the guest is owed first.
+ * When the room is ready again: the checkout of the last stay overlapping the
+ * requested window, plus the turnover hour. A guest reading "free from 16:00"
+ * can act on it - 15:00 would be the moment the room empties, not the moment it
+ * can be taken, and offering that instant back would earn them a 409.
+ *
+ * Not "the next window that fits" - that is a different and much more expensive
+ * question, and this one is what the guest is owed first.
  */
-function latestCheckOut(stays: Array<{ checkOut: Date | null }>): Date | null {
+function readyFrom(stays: Array<{ checkOut: Date | null }>): Date | null {
   const ends = stays.map((s) => s.checkOut).filter((end): end is Date => end !== null);
-  return ends.length === 0 ? null : new Date(Math.max(...ends.map((end) => end.getTime())));
+  return ends.length === 0
+    ? null
+    : new Date(Math.max(...ends.map((end) => end.getTime())) + TURNOVER_MS);
 }
 
 /**

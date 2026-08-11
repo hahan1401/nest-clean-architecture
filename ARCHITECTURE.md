@@ -508,16 +508,26 @@ There are no calendar-date columns in this schema and no date-only fields on the
 Every temporal column is `timestamptz`, every date crosses the API as a full ISO 8601
 instant in *and* out, and a bare `"2027-02-14"` is a 400.
 
-A guest picks the hour as well as the day. The site **defaults** to a 13:00 arrival and an
-11:00 departure but does not impose them: `check_in` / `check_out` hold exactly what was
-picked, to the half-hour.
+A guest picks the hour as well as the day, and the house imposes no arrival or departure
+hour of its own: `check_in` / `check_out` hold exactly what was picked, to the half-hour.
 
 The point of holding the hours is the turnover. Under date-only storage a stay ending on
 the 16th and one starting on the 16th shared that day, `daterange('[)')` called it an
 overlap, and the exclusion constraint refused the second booking — so a room could never be
-re-sold on its own checkout day. With hours, `tstzrange(check_in, check_out, '[)')` sees
-`…T04:00Z` and `…T06:00Z` as disjoint and the booking goes through, while any stay sharing a
-real night still collides.
+re-sold on its own checkout day. With hours, two stays on one date are disjoint instants and
+the booking goes through, while any stay sharing a real night still collides.
+
+What the constraint compares is not the stay but its **occupancy window** —
+`room_stay_occupancy(check_in, check_out)`, the stay plus the hour the room takes to turn
+over. A guest leaving at 15:00 frees the room at 16:00, and an arrival at 15:30 is refused by
+the database rather than by a policy someone has to remember. `TURNOVER_MS` in
+`date-range.ts` and `interval '1 hour'` in that function are the same number written twice
+and must move together.
+
+That function is marked `IMMUTABLE`, which an index requires and which `timestamptz +
+interval` does not otherwise satisfy — day and month components depend on the session zone
+across a DST boundary. Hours are added as a fixed count of seconds, so the marking is sound
+for this interval and would become a lie if the unit ever changed to days.
 
 Three rules keep the hours from leaking everywhere:
 
@@ -703,9 +713,10 @@ releasing terminals. `PENDING`, `CONFIRMED` and `COMPLETED` all hold a slot.
 Neither guarantee depends on application code being correct:
 
 - **Rooms** use a Postgres `EXCLUDE USING gist` constraint (`bookings_room_no_overlap`,
-  requires the `btree_gist` extension) over `room_id` + `tstzrange(check_in, check_out, '[)')`,
-  restricted to slot-holding statuses. The half-open range over instants makes same-day
-  turnover legal — a checkout at 11:00 and a check-in at 13:00 do not collide. Cancelling drops the row out of
+  requires the `btree_gist` extension) over `room_id` + `room_stay_occupancy(check_in,
+  check_out)` — the stay plus its turnover hour, as a `'[)'` `tstzrange` — restricted to
+  slot-holding statuses. Same-day turnover stays legal, a checkout at 11:00 and a check-in at
+  13:00 do not collide, and one at 11:30 is refused. Cancelling drops the row out of
   the partial index, freeing the dates atomically with no compensating write. A losing insert
   raises `23P01`, which the repository maps to a `ConflictError` (Prisma has no mapped code
   for exclusion violations, so it matches on the constraint name).

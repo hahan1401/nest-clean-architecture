@@ -1,4 +1,4 @@
-import { eachNight, nightCount } from './date-range';
+import { TURNOVER_MS, eachNight, nightCount, occupancyWindow } from './date-range';
 import { houseDayIndex, houseDayStart, houseWeekday, nowHouseDayStart } from './house-clock';
 
 const houseTime = (d: Date) =>
@@ -55,6 +55,49 @@ describe('nightCount', () => {
 
   it('is zero when arrival and departure fall on the same house day', () => {
     expect(nightCount(range('2027-02-14T02:00:00.000Z', '2027-02-14T13:00:00.000Z'))).toBe(0);
+  });
+});
+
+describe('occupancyWindow', () => {
+  const range = (from: string, to: string) => ({ from: new Date(from), to: new Date(to) });
+  const overlaps = (a: { from: Date; to: Date }, b: { from: Date; to: Date }) =>
+    occupancyWindow(a).from < occupancyWindow(b).to &&
+    occupancyWindow(b).from < occupancyWindow(a).to;
+
+  it('is an hour', () => {
+    expect(TURNOVER_MS).toBe(60 * 60 * 1000);
+  });
+
+  it('holds the room for an hour after the guest leaves, and not the start', () => {
+    // Checkout 15:00 on the ridge (08:00Z) -> the room is taken until 16:00.
+    const window = occupancyWindow(range('2027-02-14T06:00:00.000Z', '2027-02-16T08:00:00.000Z'));
+
+    expect(window.from.toISOString()).toBe('2027-02-14T06:00:00.000Z');
+    expect(window.to.toISOString()).toBe('2027-02-16T09:00:00.000Z');
+  });
+
+  it('lets the next guest in exactly an hour after the last one leaves', () => {
+    // Out at 15:00, in at 16:00. The windows meet and do not overlap, which is
+    // the '[)' the exclusion constraint uses.
+    const leaving = range('2027-02-12T06:00:00.000Z', '2027-02-14T08:00:00.000Z');
+    const arriving = range('2027-02-14T09:00:00.000Z', '2027-02-16T04:00:00.000Z');
+
+    expect(overlaps(leaving, arriving)).toBe(false);
+  });
+
+  it('refuses the arrival that used to be legal - the same instant as the departure', () => {
+    const leaving = range('2027-02-12T06:00:00.000Z', '2027-02-14T08:00:00.000Z');
+    const arriving = range('2027-02-14T08:00:00.000Z', '2027-02-16T04:00:00.000Z');
+
+    expect(overlaps(leaving, arriving)).toBe(true);
+  });
+
+  it('refuses an arrival inside the hour', () => {
+    // 15:00 out, 15:59 in: one minute short, and someone still has to clean it.
+    const leaving = range('2027-02-12T06:00:00.000Z', '2027-02-14T08:00:00.000Z');
+    const arriving = range('2027-02-14T08:59:00.000Z', '2027-02-16T04:00:00.000Z');
+
+    expect(overlaps(leaving, arriving)).toBe(true);
   });
 });
 
