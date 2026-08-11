@@ -393,8 +393,8 @@ anywhere, including during bootstrap.
 | Pattern | Payload | Description |
 |---------|---------|-------------|
 | `bank-list` | `{}` | VNPay bank list |
-| `generate-qr` | `{}` from the gateway today | Generate VNPay QR |
-| `generate-url` | `{}` from the gateway today | Build hosted VNPay payment URL |
+| `generate-qr` | `GeneratePaymentDto & { requestId }` | Generate VNPay QR |
+| `generate-url` | `GeneratePaymentDto & { requestId }` | Build hosted VNPay payment URL |
 | `return-url` | `{}` from the gateway today | Verify VNPay return URL data |
 
 ### Chatbot Service (`api-chatbot`)
@@ -615,11 +615,13 @@ socket.on('notification', (n) => console.log(n));
 | `POST` | `/payment/generate-return-url` | `return-url` |
 | `GET` | `/payment/ipn` | currently returns query payload from gateway |
 
-> ⚠️ **Payment is not connected to anything.** All four proxy routes send a literal `{}` —
-> the gateway declares no body parameter, so a posted payload is discarded before it reaches
-> `api-payment` — and `/payment/ipn` echoes its own query string without verifying a
-> signature. Confirming a booking takes no money. Wiring this up means giving each route a
-> validated DTO in `@app/common` first.
+> ⚠️ **Payment is not fully connected.** `generate-qr` and `generate-payment-url` now forward
+> the caller's body as `GeneratePaymentDto` (`amount`, `orderId`, `orderInfo?`,
+> `transactionRef?`, `returnUrl?`, `ipAddr?`, `orderType?`, `locale?`, `bankCode?`,
+> `billingMobile?`, `billingEmail?`) plus `requestId`. `generate-return-url` still sends a
+> literal `{}` — the gateway declares no body/query parameter for it — and `/payment/ipn`
+> echoes its own query string without verifying a signature. No booking transition depends
+> on a payment result yet.
 
 ### Chatbot Endpoints
 
@@ -945,7 +947,7 @@ each one changes the shape of the system.
 | Gap | What it means today |
 |-----|---------------------|
 | **No authentication or authorization anywhere** | Every gateway route is public, including the operator-shaped ones: `POST /api/rooms`, `POST /api/price-rules`, `POST /api/bookings/:id/confirm`, `GET /api/bookings/:id`. `users.password` is accepted, stored **in plaintext**, and never verified — there is no login to verify it against. `UserResponseDto` at least keeps it out of responses. The system must not face the public internet as it stands. |
-| **Payment is decorative** | See the note under the payment endpoints — the gateway forwards `{}`, the IPN route verifies nothing, and no booking transition depends on a payment result. |
+| **Payment is not fully connected** | `generate-qr`/`generate-payment-url` now forward a validated `GeneratePaymentDto`; `generate-return-url` and the IPN route still don't verify anything, and no booking transition depends on a payment result. See the note under the payment endpoints. |
 | **The cancellation token is logged** | `CREDENTIAL_PATH_PREFIXES` matches `/bookings/cancel/` with `startsWith`, but the `/api` global prefix means the gateway sees `/api/bookings/cancel/<token>`. The prefix list needs the `/api` form, or the match needs to be substring-based. |
 | **Rate limiting and idempotency keys** | Nothing throttles `POST /api/bookings`, and a retried create makes a second hold rather than returning the first. The exclusion constraint keeps this safe, not merely tidy — but it makes a client's network retry visible to the guest as a `409`. |
 | **`api-user` is orphaned from booking** | A `Booking` stores customer name/email/phone as plain columns and never references `User`. The two halves of the system do not know about each other yet. |

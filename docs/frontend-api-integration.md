@@ -657,20 +657,25 @@ upload's own filename), `chunkSize?`, `chunkOverlap?`. See §9 for consumption c
 
 ### Payment — `/payment`
 
-| Method | Path | Returns |
-|---|---|---|
-| `GET` | `/payment/bank-list` | `200` VNPay bank list |
-| `POST` | `/payment/generate-qr` | `200` QR payload |
-| `POST` | `/payment/generate-payment-url` | `200` redirect URL |
-| `POST` | `/payment/generate-return-url` | `200` `{ verified, success, message, transaction, amount, data }` |
-| `GET` | `/payment/ipn` | `200` echoes the query string |
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| `GET` | `/payment/bank-list` | — | `200` VNPay bank list |
+| `POST` | `/payment/generate-qr` | `GeneratePaymentDto` | `200` QR payload |
+| `POST` | `/payment/generate-payment-url` | `GeneratePaymentDto` | `200` redirect URL |
+| `POST` | `/payment/generate-return-url` | — | `200` `{ verified, success, message, transaction, amount, data }` |
+| `GET` | `/payment/ipn` | — | `200` echoes the query string |
 
-⚠️ **These are not wired up yet.** The gateway forwards an empty `{}` payload to the payment service
-for all three `POST` routes, so any body you send is discarded — the downstream services expect a
-`PaymentRequest` (amount, order id, return URL) that never arrives. `GET /payment/ipn` at the gateway
-just echoes its query rather than calling the verifier. Payment is also not connected to the booking
-domain: confirming a booking takes no money. Do not build a checkout against these until the gateway
-forwards real payloads.
+`GeneratePaymentDto`: `amount` (whole VND, required — the service multiplies by 100 for VNPay's
+wire format, so send the real order total, not a pre-multiplied number), `orderId` (required,
+your booking/order reference — also used as the VNPay `vnp_TxnRef` fallback, so pass a value
+that's unique per payment attempt, not reused across retries), `orderInfo?`, `transactionRef?`
+(overrides the txn ref derived from `orderId`), `returnUrl?`, `ipAddr?`, `orderType?`, `locale?`
+(`'vn' | 'en'`), `bankCode?`, `billingMobile?`, `billingEmail?`.
+
+⚠️ **`generate-return-url` and `/payment/ipn` are still not wired up.** The gateway forwards an
+empty `{}` payload to `generate-return-url`, and `GET /payment/ipn` just echoes its query rather
+than calling the verifier. Payment is also not connected to the booking domain: confirming a
+booking takes no money. Do not build return/IPN handling against these yet.
 
 ---
 

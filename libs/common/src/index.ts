@@ -11,6 +11,7 @@ export * from './dtos/is-iso-instant.decorator';
 export * from './dtos/booking-input.dto';
 export * from './dtos/booking-query.dto';
 export * from './dtos/booking-response.dto';
+export * from './dtos/payment.dto';
 export * from './logger';
 export * from './errors';
 export * from './types/request';

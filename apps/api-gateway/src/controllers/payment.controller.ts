@@ -1,7 +1,9 @@
-import { PAYMENT_PATTERNS, PAYMENT_SERVICE } from '@app/common';
-import { Controller, Get, Inject, Post, Query } from '@nestjs/common';
+import { GeneratePaymentDto, PAYMENT_PATTERNS, PAYMENT_SERVICE } from '@app/common';
+import type { CorrelatedRequest } from '@app/common';
+import { Body, Controller, Get, Inject, Post, Query, Req } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { lastValueFrom } from 'rxjs';
+import type { GenerateQrResponse } from 'vnpay';
 
 @Controller('payment')
 export class PaymentController {
@@ -13,13 +15,23 @@ export class PaymentController {
   }
 
   @Post('/generate-qr')
-  generateQr() {
-    return lastValueFrom(this.paymentClient.send(PAYMENT_PATTERNS.GENERATE_QR, {}));
+  generateQr(@Req() req: CorrelatedRequest, @Body() dto: GeneratePaymentDto) {
+    return lastValueFrom(
+      this.paymentClient.send<GenerateQrResponse>(PAYMENT_PATTERNS.GENERATE_QR, {
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
   }
 
   @Post('/generate-payment-url')
-  generatePaymentUrl() {
-    return lastValueFrom(this.paymentClient.send(PAYMENT_PATTERNS.GENERATE_URL, {}));
+  generatePaymentUrl(@Req() req: CorrelatedRequest, @Body() dto: GeneratePaymentDto) {
+    return lastValueFrom(
+      this.paymentClient.send<string>(PAYMENT_PATTERNS.GENERATE_URL, {
+        ...dto,
+        requestId: req.requestId,
+      }),
+    );
   }
 
   @Post('/generate-return-url')

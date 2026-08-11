@@ -39,19 +39,20 @@ export class MyVnpayService extends VnPayPort {
   }
 
   private buildPaymentPayload(payload: PaymentRequest): VnpayPaymentPayload {
-    const amount = Number(payload?.amount ?? 10);
-    const vnpAmount = Number.isFinite(amount) ? Math.round(amount * 100) : 10000 * 100;
-    const orderInfo =
-      payload?.orderInfo ?? `Thanh toan don hang ${payload?.transactionRef ?? 'ORDER'}`;
-    const transactionRef = String(
-      payload?.transactionRef ?? payload?.orderId ?? `ORD-${Date.now()}`,
-    );
+    const amount = Number(payload?.amount ?? 1000);
+    // vnpay package multiplies vnp_Amount by 100 internally, so pass the raw VND amount here.
+    const vnpAmount = Number.isFinite(amount) ? Math.round(amount) : 10000;
+    // Compute the ref first so orderInfo's fallback matches the ref actually sent as
+    // vnp_TxnRef, instead of checking `transactionRef` alone and falling through to the
+    // literal word "ORDER" whenever only `orderId` was supplied.
+    const transactionRef = String(`${Date.now()}`);
+    const orderInfo = payload?.orderInfo ?? `Thanh toan don hang ${transactionRef}`;
     const ipAddr =
-      payload?.ipAddr ?? this.configService.get<string>('VNPAY_IP_ADDR') ?? '127.0.0.1';
+      payload?.ipAddr?.trim() || this.configService.get<string>('VNPAY_IP_ADDR') || '172.20.10.2';
     const returnUrl =
-      payload?.returnUrl ??
-      this.configService.get<string>('VNPAY_RETURN_URL') ??
-      'http://localhost:3000/payment/return';
+      payload?.returnUrl ||
+      this.configService.get<string>('VNPAY_RETURN_URL') ||
+      'https://homestay-booking-fe-ecru.vercel.app/api/vnpay-ipn';
 
     const start = new Date();
     const end = new Date(start.getTime() + 15 * 60 * 1000);
@@ -77,14 +78,16 @@ export class MyVnpayService extends VnPayPort {
 
   async generatePaymentQrCode(payload: PaymentRequest): Promise<GenerateQrResponse> {
     const payloadData = this.buildPaymentPayload(payload);
-
-    this.logger.debug({ payloadData }, 'vnpay payload data');
+    this.logger.info({ payloadData }, 'vnpay payload data');
 
     return this.vnpayService.generateQr(payloadData);
   }
 
-  buildPaymentUrl(payload: PaymentRequest): Promise<string> {
-    return Promise.resolve(this.vnpayService.buildPaymentUrl(this.buildPaymentPayload(payload)));
+  async buildPaymentUrl(payload: PaymentRequest): Promise<string> {
+    const payloadData = this.buildPaymentPayload(payload);
+    this.logger.info({ payloadData }, 'vnpay payload data');
+
+    return this.vnpayService.buildPaymentUrl(payloadData);
   }
 
   async verifyReturnUrl(query: ReturnQueryFromVNPay): Promise<VerifyReturnUrl> {
